@@ -93,21 +93,21 @@ export function AppShell({
   return (
     <div className="app-bg flex min-h-screen">
       {/* Sidebar — desktop */}
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-1 border-r border-black/5 px-3 py-4 dark:border-white/10 md:flex">
-        <Link href="/" className="mb-4 flex items-center gap-2 px-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-imsg-blue text-white shadow-glass">
-            <MessageCircle className="h-4 w-4" />
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-0.5 border-r border-separator px-3 py-4 md:flex">
+        <Link href="/" className="mb-4 flex items-center gap-2.5 px-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-row bg-accent text-white">
+            <MessageCircle className="h-[18px] w-[18px]" />
           </span>
-          <span className="font-semibold tracking-tight">Outreach</span>
+          <span className="text-[17px] font-semibold tracking-[-0.022em]">Outreach</span>
         </Link>
 
         <button
           onClick={() => setPaletteOpen(true)}
-          className="mb-3 flex items-center gap-2 rounded-xl border border-black/5 bg-white/60 px-3 py-2 text-sm text-neutral-400 transition hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+          className="press mb-3 flex items-center gap-2 rounded-row bg-fill px-3 py-2 text-reduced text-label-secondary transition-colors duration-fast ease-ios hover:bg-fill-secondary"
         >
           <Search className="h-3.5 w-3.5" />
-          <span className="flex-1 text-left">Search…</span>
-          <kbd className="rounded-md border border-black/10 px-1 text-[10px] dark:border-white/15">
+          <span className="flex-1 text-left">Search</span>
+          <kbd className="rounded-control bg-fill-secondary px-1.5 py-0.5 text-caption2 text-label-secondary">
             ⌘K
           </kbd>
         </button>
@@ -121,20 +121,20 @@ export function AppShell({
                 key={n.href}
                 href={n.href}
                 className={cn(
-                  "group relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+                  "group relative flex items-center gap-3 rounded-row px-3 py-2 text-reduced font-medium transition-colors duration-fast ease-ios",
                   active
-                    ? "text-imsg-blue"
-                    : "text-neutral-600 hover:bg-black/5 dark:text-neutral-300 dark:hover:bg-white/5",
+                    ? "text-accent"
+                    : "text-label-secondary hover:bg-fill-tertiary",
                 )}
               >
                 {active ? (
                   <motion.span
                     layoutId="nav-active"
-                    className="absolute inset-0 -z-0 rounded-xl bg-imsg-blue/10"
+                    className="absolute inset-0 -z-0 rounded-row bg-accent/10"
                     transition={{ type: "spring", stiffness: 420, damping: 34 }}
                   />
                 ) : null}
-                <Icon className="relative z-10 h-4 w-4" />
+                <Icon className="relative z-10 h-[18px] w-[18px]" />
                 <span className="relative z-10">{n.label}</span>
               </Link>
             );
@@ -144,7 +144,7 @@ export function AppShell({
         <div className="mt-auto flex items-center justify-between gap-2 px-1">
           <HealthBadge />
           <form action={signOut}>
-            <button className="text-xs text-neutral-400 transition hover:text-neutral-700 dark:hover:text-neutral-200">
+            <button className="text-footnote text-label-secondary transition-colors duration-fast ease-ios hover:text-label">
               Sign out
             </button>
           </form>
@@ -153,21 +153,21 @@ export function AppShell({
 
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="glass safe-top sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-3">
+        <header className="glass hairline-b safe-top sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-2 md:hidden">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-imsg-blue text-white">
-              <MessageCircle className="h-3.5 w-3.5" />
+            <span className="flex h-7 w-7 items-center justify-center rounded-row bg-accent text-white">
+              <MessageCircle className="h-4 w-4" />
             </span>
-            <span className="font-semibold">Outreach</span>
+            <span className="text-[17px] font-semibold tracking-[-0.022em]">Outreach</span>
           </div>
-          <h1 className="hidden text-sm font-medium text-neutral-500 md:block">
+          <h1 className="hidden text-reduced font-medium text-label-secondary md:block">
             {pageTitle(pathname)}
           </h1>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPaletteOpen(true)}
               aria-label="Search"
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-black/5 bg-white/60 text-neutral-500 transition hover:bg-white dark:border-white/10 dark:bg-white/5 md:hidden"
+              className="press flex h-8 w-8 items-center justify-center rounded-full bg-fill text-label-secondary md:hidden"
             >
               <Search className="h-4 w-4" />
             </button>
@@ -178,14 +178,14 @@ export function AppShell({
         </header>
 
         <main className="flex-1 px-4 py-5 pb-28 md:px-8 md:pb-10">
-          <div className="mx-auto w-full max-w-5xl">
+          <div className="mx-auto w-full max-w-content">
             <AnimatePresence mode="wait">
               <motion.div
                 key={pathname}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.22, ease: "easeOut" }}
+                transition={{ duration: 0.25, ease: [0, 0, 0.58, 1] }}
               >
                 {children}
               </motion.div>
@@ -195,7 +195,7 @@ export function AppShell({
       </div>
 
       {/* Bottom tab bar — mobile */}
-      <nav className="glass-strong safe-bottom fixed inset-x-0 bottom-0 z-30 flex items-center justify-around px-2 pt-2 md:hidden">
+      <nav className="material-bar hairline-t safe-bottom fixed inset-x-0 bottom-0 z-30 flex items-center justify-around px-2 pt-1.5 md:hidden">
         {NAV_ITEMS.slice(0, 5).map((n) => {
           const active = isActive(n.href);
           const Icon = n.icon;
@@ -204,11 +204,11 @@ export function AppShell({
               key={n.href}
               href={n.href}
               className={cn(
-                "flex flex-1 flex-col items-center gap-0.5 rounded-lg py-1 text-[10px] font-medium transition-colors",
-                active ? "text-imsg-blue" : "text-neutral-400",
+                "press flex flex-1 flex-col items-center gap-0.5 rounded-control py-1.5 text-caption2",
+                active ? "text-accent" : "text-sysgray",
               )}
             >
-              <Icon className="h-5 w-5" />
+              <Icon className="h-6 w-6" />
               {n.label}
             </Link>
           );

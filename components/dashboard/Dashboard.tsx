@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Pause,
   RotateCcw,
+  ChevronRight,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -33,16 +34,19 @@ export type DashboardData = {
 
 const container: Variants = {
   hidden: {},
-  show: { transition: { staggerChildren: 0.06 } },
+  show: { transition: { staggerChildren: 0.05 } },
 };
 const item: Variants = {
-  hidden: { opacity: 0, y: 14 },
+  hidden: { opacity: 0, y: 12 },
   show: {
     opacity: 1,
     y: 0,
-    transition: { type: "spring", stiffness: 380, damping: 30 },
+    transition: { type: "spring", stiffness: 380, damping: 32 },
   },
 };
+
+const cardBase =
+  "rounded-card bg-surface shadow-card ring-1 ring-black/[0.04] dark:ring-white/[0.06]";
 
 function greeting() {
   const h = new Date().getHours();
@@ -77,11 +81,11 @@ function Ring({ value, max }: { value: number; max: number }) {
         fill="none"
         strokeWidth="6"
         strokeLinecap="round"
-        className={cn(pct >= 1 ? "stroke-orange-500" : "stroke-imsg-blue")}
+        className={cn(pct >= 1 ? "stroke-warning" : "stroke-accent")}
         strokeDasharray={c}
         initial={{ strokeDashoffset: c }}
         animate={{ strokeDashoffset: c * (1 - pct) }}
-        transition={{ duration: 0.9, ease: "easeOut" }}
+        transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
       />
     </svg>
   );
@@ -102,23 +106,23 @@ function StatCard({
 }) {
   const toneCls =
     tone === "red"
-      ? "text-red-500 bg-red-500/10"
+      ? "text-danger bg-danger/10"
       : tone === "blue"
-        ? "text-imsg-blue bg-imsg-blue/10"
-        : "text-neutral-500 bg-black/5 dark:bg-white/10";
+        ? "text-accent bg-accent/10"
+        : "text-label-secondary bg-fill-tertiary";
   return (
-    <motion.div variants={item} className="glass rounded-2xl p-5 shadow-card">
+    <motion.div variants={item} className={cn(cardBase, "p-5")}>
       <span
         className={cn(
-          "mb-3 inline-flex h-8 w-8 items-center justify-center rounded-lg",
+          "mb-3 inline-flex h-8 w-8 items-center justify-center rounded-control",
           toneCls,
         )}
       >
-        <Icon className="h-4 w-4" />
+        <Icon className="h-[18px] w-[18px]" />
       </span>
-      <div className="text-2xl font-semibold tracking-tight">{value}</div>
-      <div className="text-xs text-neutral-500">{label}</div>
-      <div className="mt-0.5 text-[11px] text-neutral-400">{sub}</div>
+      <div className="text-h5 tabular-nums">{value}</div>
+      <div className="text-footnote text-label-secondary">{label}</div>
+      <div className="mt-0.5 text-caption text-label-secondary">{sub}</div>
     </motion.div>
   );
 }
@@ -140,26 +144,29 @@ function Action({
     <Link href={href} className="block">
       <motion.div
         whileHover={{ y: -2 }}
-        whileTap={{ scale: 0.98 }}
+        whileTap={{ scale: 0.97 }}
+        transition={{ type: "spring", stiffness: 500, damping: 30 }}
         className={cn(
-          "flex h-full items-center gap-3 rounded-2xl p-4 shadow-card transition-colors",
-          primary ? "bg-imsg-blue text-white" : "glass",
+          "flex h-full items-center gap-3 rounded-card p-4",
+          primary
+            ? "bg-accent text-white shadow-card"
+            : cardBase,
         )}
       >
         <span
           className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
-            primary ? "bg-white/20" : "bg-imsg-blue/10 text-imsg-blue",
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-row",
+            primary ? "bg-white/20" : "bg-accent/10 text-accent",
           )}
         >
           <Icon className="h-5 w-5" />
         </span>
         <span className="min-w-0">
-          <span className="block text-sm font-medium">{title}</span>
+          <span className="block text-subhead font-medium">{title}</span>
           <span
             className={cn(
-              "block truncate text-xs",
-              primary ? "text-white/70" : "text-neutral-400",
+              "block truncate text-caption",
+              primary ? "text-white/75" : "text-label-secondary",
             )}
           >
             {sub}
@@ -192,15 +199,15 @@ export function Dashboard({
       {/* Header */}
       <motion.div variants={item} className="flex items-end justify-between">
         <div>
-          <p className="text-sm text-neutral-400">{greeting()}</p>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="text-footnote text-label-secondary">{greeting()}</p>
+          <h1 className="text-h4 font-display">Dashboard</h1>
         </div>
         {paused ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-500/10 px-3 py-1 text-xs font-medium text-orange-600">
-            <Pause className="h-3 w-3" /> Sending paused
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-3 py-1 text-caption font-medium text-warning">
+            <Pause className="h-3 w-3" /> Paused
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-3 py-1 text-xs font-medium text-green-600">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-caption font-medium text-success">
             <CheckCircle2 className="h-3 w-3" /> Active
           </span>
         )}
@@ -213,15 +220,15 @@ export function Dashboard({
       >
         <motion.div
           variants={item}
-          className="glass col-span-2 flex items-center gap-4 rounded-2xl p-5 shadow-card lg:col-span-1"
+          className={cn(cardBase, "col-span-2 flex items-center gap-4 p-5 lg:col-span-1")}
         >
           <Ring value={sentToday} max={dailyCap} />
           <div>
-            <div className="text-2xl font-semibold tracking-tight">
+            <div className="text-h5 tabular-nums">
               {sentToday}
-              <span className="text-base text-neutral-400">/{dailyCap}</span>
+              <span className="text-title3 text-label-secondary">/{dailyCap}</span>
             </div>
-            <div className="text-xs text-neutral-500">Sent today</div>
+            <div className="text-footnote text-label-secondary">Sent today</div>
           </div>
         </motion.div>
         <StatCard
@@ -274,34 +281,38 @@ export function Dashboard({
       </motion.div>
 
       {/* Recent replies */}
-      <motion.section variants={item} className="glass rounded-2xl p-4 shadow-card">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Recent replies</h2>
-          <Link href="/inbox" className="text-xs text-imsg-blue hover:underline">
+      <motion.section variants={item} className={cn(cardBase, "p-2")}>
+        <div className="flex items-center justify-between px-3 py-2">
+          <h2 className="text-subhead font-semibold">Recent replies</h2>
+          <Link
+            href="/inbox"
+            className="text-footnote text-accent transition-opacity duration-fast ease-ios hover:opacity-70"
+          >
             View all
           </Link>
         </div>
         {replies.length === 0 ? (
-          <div className="px-2 py-8 text-center text-sm text-neutral-400">
+          <div className="px-3 py-8 text-center text-subhead text-label-secondary">
             No replies yet
           </div>
         ) : (
-          <ul className="space-y-1">
+          <ul>
             {replies.map((r) => (
               <li key={r.id}>
                 <Link
                   href={`/inbox/${encodeURIComponent(r.chatGuid)}`}
-                  className="flex items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-black/5 dark:hover:bg-white/5"
+                  className="flex items-center gap-3 rounded-row px-3 py-2 transition-colors duration-fast ease-ios hover:bg-fill-tertiary"
                 >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-imsg-blue/10 text-xs font-medium text-imsg-blue">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/10 text-caption font-semibold text-accent">
                     {initials(r.chatGuid)}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm">{r.body}</span>
-                    <span className="block truncate text-xs text-neutral-400">
+                    <span className="block truncate text-subhead">{r.body}</span>
+                    <span className="block truncate text-caption text-label-secondary">
                       {r.chatGuid}
                     </span>
                   </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-label-tertiary" />
                 </Link>
               </li>
             ))}
@@ -313,27 +324,27 @@ export function Dashboard({
       {failedRows.length > 0 ? (
         <motion.section
           variants={item}
-          className="rounded-2xl border border-red-500/20 bg-red-500/[0.03] p-4"
+          className="rounded-card border border-danger/20 bg-danger/[0.04] p-2"
         >
-          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-red-600">
+          <h2 className="flex items-center gap-1.5 px-3 py-2 text-subhead font-semibold text-danger">
             <AlertTriangle className="h-4 w-4" /> Failed sends
           </h2>
-          <ul className="space-y-1">
+          <ul>
             {failedRows.map((m) => (
               <li
                 key={m.id}
-                className="flex items-center gap-3 rounded-xl px-2 py-2"
+                className="flex items-center gap-3 px-3 py-2"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">{m.body}</span>
-                  <span className="block truncate text-xs text-neutral-400">
+                  <span className="block truncate text-subhead">{m.body}</span>
+                  <span className="block truncate text-caption text-label-secondary">
                     {m.chatGuid}
                     {m.error ? ` · ${m.error}` : ""}
                   </span>
                 </span>
                 <form action={requeue}>
                   <input type="hidden" name="id" value={m.id} />
-                  <button className="flex items-center gap-1 rounded-lg border border-black/10 px-2 py-1 text-xs transition hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/5">
+                  <button className="press flex items-center gap-1 rounded-control border border-hairline px-2.5 py-1 text-footnote transition-colors duration-fast ease-ios hover:bg-fill-tertiary">
                     <RotateCcw className="h-3 w-3" /> Requeue
                   </button>
                 </form>

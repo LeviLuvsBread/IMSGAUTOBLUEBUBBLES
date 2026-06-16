@@ -117,7 +117,7 @@ export function CommandPalette({
           exit={{ opacity: 0 }}
         >
           <motion.div
-            className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/20 backdrop-blur-[2px]"
             onClick={onClose}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -129,27 +129,27 @@ export function CommandPalette({
             initial={{ opacity: 0, scale: 0.97, y: -8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.98, y: -8 }}
-            transition={{ type: "spring", stiffness: 440, damping: 34 }}
-            className="glass-strong relative z-10 w-full max-w-xl overflow-hidden rounded-2xl shadow-glass-lg"
+            transition={{ type: "spring", stiffness: 420, damping: 34 }}
+            className="material-thick relative z-10 w-full max-w-[640px] overflow-hidden rounded-card shadow-overlay"
           >
-            <div className="flex items-center gap-3 border-b border-black/5 px-4 dark:border-white/10">
-              <Search className="h-4 w-4 shrink-0 text-neutral-400" />
+            <div className="flex items-center gap-3 border-b border-separator px-4">
+              <Search className="h-4 w-4 shrink-0 text-label-secondary" />
               <input
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={onKeyDown}
-                placeholder="Search commands…"
-                className="w-full bg-transparent py-3.5 text-sm outline-none placeholder:text-neutral-400"
+                placeholder="Search commands"
+                className="w-full bg-transparent py-3.5 text-body outline-none placeholder:text-label-secondary"
               />
-              <kbd className="shrink-0 rounded-md border border-black/10 px-1.5 py-0.5 text-[10px] text-neutral-400 dark:border-white/15">
+              <kbd className="shrink-0 rounded-control bg-fill-secondary px-1.5 py-0.5 text-caption2 text-label-secondary">
                 ESC
               </kbd>
             </div>
 
             <div ref={listRef} className="max-h-[50vh] overflow-y-auto p-2">
               {filtered.length === 0 ? (
-                <div className="px-3 py-10 text-center text-sm text-neutral-400">
+                <div className="px-3 py-10 text-center text-subhead text-label-secondary">
                   No commands found
                 </div>
               ) : (
@@ -161,7 +161,7 @@ export function CommandPalette({
                   return (
                     <div key={c.id}>
                       {showHeader ? (
-                        <div className="px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-neutral-400">
+                        <div className="px-2 pb-1 pt-2 text-caption2 uppercase tracking-wide text-label-secondary">
                           {c.group}
                         </div>
                       ) : null}
@@ -170,28 +170,21 @@ export function CommandPalette({
                         onMouseMove={() => setActive(idx)}
                         onClick={() => run(c)}
                         className={cn(
-                          "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors",
+                          "flex w-full items-center gap-3 rounded-row px-3 py-2.5 text-left text-subhead transition-colors duration-fast ease-ios",
                           isActive
-                            ? "bg-imsg-blue text-white"
-                            : "text-neutral-700 dark:text-neutral-200",
+                            ? "bg-accent/10 text-accent"
+                            : "text-label",
                         )}
                       >
                         <Icon
                           className={cn(
-                            "h-4 w-4 shrink-0",
-                            isActive ? "text-white" : "text-neutral-400",
+                            "h-[18px] w-[18px] shrink-0",
+                            isActive ? "text-accent" : "text-label-secondary",
                           )}
                         />
                         <span className="flex-1">{c.label}</span>
                         {c.hint ? (
-                          <kbd
-                            className={cn(
-                              "rounded-md px-1.5 py-0.5 text-[10px]",
-                              isActive
-                                ? "bg-white/20 text-white"
-                                : "bg-black/5 text-neutral-400 dark:bg-white/10",
-                            )}
-                          >
+                          <kbd className="rounded-control bg-fill-secondary px-1.5 py-0.5 text-caption2 text-label-secondary">
                             {c.hint}
                           </kbd>
                         ) : null}
@@ -202,7 +195,7 @@ export function CommandPalette({
               )}
             </div>
 
-            <div className="flex items-center gap-4 border-t border-black/5 px-4 py-2 text-[11px] text-neutral-400 dark:border-white/10">
+            <div className="flex items-center gap-4 border-t border-separator px-4 py-2 text-caption text-label-secondary">
               <span className="flex items-center gap-1">
                 <ArrowUp className="h-3 w-3" />
                 <ArrowDown className="h-3 w-3" /> navigate

@@ -4,6 +4,68 @@
 
 :root {
   color-scheme: light dark;
+
+  /* Palette as RGB triplets so Tailwind can apply opacity: rgb(var(--x) / <alpha>). */
+  --canvas: 245 245 247; /* systemGroupedBackground / apple.com Fog */
+  --canvas-alt: 251 251 253;
+  --surface: 255 255 255;
+  --surface-2: 255 255 255;
+  --label: 29 29 31; /* #1d1d1f */
+  --label-secondary: 110 110 115; /* #6e6e73 */
+  --accent: 0 122 255; /* systemBlue #007AFF */
+  --accent-cta: 0 113 227; /* apple.com Buy-blue #0071e3 */
+  --link: 0 102 204;
+  --success: 52 199 89; /* systemGreen #34C759 */
+  --danger: 255 59 48; /* systemRed #FF3B30 */
+  --warning: 255 149 0; /* systemOrange #FF9500 */
+  --separator-opaque: 198 198 200; /* #c6c6c8 */
+  --bubble-received: 229 229 234; /* systemGray5 #e5e5ea */
+  --sysgray: 142 142 147; /* #8e8e93 */
+
+  /* Alpha-baked fills, separators, and materials (used directly). */
+  --label-tertiary: rgba(60, 60, 67, 0.3);
+  --separator: rgba(60, 60, 67, 0.29);
+  --fill: rgba(120, 120, 128, 0.2);
+  --fill-secondary: rgba(120, 120, 128, 0.16);
+  --fill-tertiary: rgba(118, 118, 128, 0.12);
+  --fill-quaternary: rgba(116, 116, 128, 0.08);
+  --material-bar: rgba(250, 250, 252, 0.8);
+  --material-regular: rgba(255, 255, 255, 0.72);
+  --material-thick: rgba(255, 255, 255, 0.86);
+
+  /* Motion. */
+  --ease-out: cubic-bezier(0, 0, 0.58, 1);
+  --ease-out-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 150ms;
+  --dur-base: 250ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: 0 0 0;
+    --canvas-alt: 22 22 23;
+    --surface: 28 28 30; /* #1c1c1e */
+    --surface-2: 44 44 46; /* #2c2c2e */
+    --label: 245 245 247;
+    --label-secondary: 134 134 139; /* #86868b */
+    --accent: 10 132 255; /* systemBlue dark #0A84FF */
+    --accent-cta: 10 132 255;
+    --link: 41 151 255; /* #2997ff */
+    --success: 48 209 88; /* #30D158 */
+    --danger: 255 69 58; /* #FF453A */
+    --warning: 255 159 10; /* #FF9F0A */
+    --separator-opaque: 56 56 58; /* #38383a */
+    --bubble-received: 58 58 60; /* systemGray4 #3a3a3c */
+    --label-tertiary: rgba(235, 235, 245, 0.3);
+    --separator: rgba(84, 84, 88, 0.6);
+    --fill: rgba(120, 120, 128, 0.36);
+    --fill-secondary: rgba(120, 120, 128, 0.32);
+    --fill-tertiary: rgba(118, 118, 128, 0.24);
+    --fill-quaternary: rgba(118, 118, 128, 0.18);
+    --material-bar: rgba(22, 22, 23, 0.8);
+    --material-regular: rgba(28, 28, 30, 0.72);
+    --material-thick: rgba(28, 28, 30, 0.86);
+  }
 }
 
 html,
@@ -12,24 +74,140 @@ body {
 }
 
 body {
-  @apply bg-neutral-100 text-neutral-900 antialiased dark:bg-black dark:text-neutral-100;
+  background: rgb(var(--canvas));
+  color: rgb(var(--label));
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 17px;
+  line-height: 1.4706;
+  letter-spacing: -0.022em; /* the signature Apple-on-web body tracking */
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
-/* Layered, depth-y app backdrop (subtle Apple-style color wash). */
-.app-bg {
-  background:
-    radial-gradient(1100px 560px at 100% -10%, rgba(10, 132, 255, 0.1), transparent 60%),
-    radial-gradient(900px 480px at -10% 110%, rgba(48, 209, 88, 0.07), transparent 55%);
+/* SF Pro Display for large headings (Apple's optical crossover ~24px). */
+h1,
+h2,
+h3,
+.font-display {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+    "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
-/* Frosted-glass surfaces. */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Subtle two-radial color wash over the canvas. */
+.app-bg {
+  background:
+    radial-gradient(
+      1100px 560px at 100% -10%,
+      rgba(10, 132, 255, 0.1),
+      transparent 60%
+    ),
+    radial-gradient(
+      900px 480px at -10% 110%,
+      rgba(48, 209, 88, 0.06),
+      transparent 55%
+    );
+}
+@media (prefers-color-scheme: dark) {
+  .app-bg {
+    background:
+      radial-gradient(
+        1100px 560px at 100% -10%,
+        rgba(10, 132, 255, 0.07),
+        transparent 60%
+      ),
+      radial-gradient(
+        900px 480px at -10% 110%,
+        rgba(48, 209, 88, 0.04),
+        transparent 55%
+      );
+  }
+}
+
+/* Materials — subtle frosted glass (the real apple.com recipe). Never stacked. */
+.material-bar {
+  background: var(--material-bar);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+.material-regular {
+  background: var(--material-regular);
+  -webkit-backdrop-filter: saturate(180%) blur(30px);
+  backdrop-filter: saturate(180%) blur(30px);
+}
+.material-thick {
+  background: var(--material-thick);
+  -webkit-backdrop-filter: saturate(180%) blur(30px);
+  backdrop-filter: saturate(180%) blur(30px);
+}
+@supports not (
+  (-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))
+) {
+  .material-bar {
+    background: rgba(250, 250, 252, 0.92);
+  }
+  .material-regular,
+  .material-thick {
+    background: rgba(255, 255, 255, 0.96);
+  }
+  @media (prefers-color-scheme: dark) {
+    .material-bar {
+      background: rgba(22, 22, 23, 0.92);
+    }
+    .material-regular,
+    .material-thick {
+      background: rgba(28, 28, 30, 0.96);
+    }
+  }
+}
+
+/* Legacy .glass aliases mapped to the correct materials (keeps existing markup). */
 .glass {
-  @apply border border-white/50 bg-white/70 backdrop-blur-xl dark:border-white/10 dark:bg-neutral-900/55;
+  background: var(--material-bar);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
 }
 .glass-strong {
-  @apply border border-white/60 bg-white/85 backdrop-blur-2xl dark:border-white/10 dark:bg-neutral-900/80;
+  background: var(--material-thick);
+  -webkit-backdrop-filter: saturate(180%) blur(30px);
+  backdrop-filter: saturate(180%) blur(30px);
+}
+
+/* Hairlines — true 1px (0.5px on retina). */
+.hairline-b {
+  border-bottom: 1px solid var(--separator);
+}
+.hairline-t {
+  border-top: 1px solid var(--separator);
+}
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 2dppx) {
+  .hairline-b,
+  .hairline-t {
+    border-width: 0.5px;
+  }
+}
+
+/* apple.com-exact focus ring. */
+:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 3px;
+  border-radius: inherit;
+}
+
+/* Tactile press feedback. */
+.press {
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
+}
+.press:active {
+  transform: scale(0.97);
+  opacity: 0.9;
 }
 
 /* Thin, rounded scrollbars. */
@@ -56,10 +234,22 @@ body {
   background: rgba(10, 132, 255, 0.25);
 }
 
-/* Respect iOS safe areas when installed as a PWA. */
+/* iOS PWA safe areas. */
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom);
 }
 .safe-top {
   padding-top: env(safe-area-inset-top);
+}
+
+/* Reduced motion — neutralize transforms; meaningful changes cross-fade. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

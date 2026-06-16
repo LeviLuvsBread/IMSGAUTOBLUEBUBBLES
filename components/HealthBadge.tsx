@@ -25,19 +25,18 @@ export function HealthBadge() {
     };
   }, []);
 
-  const dot =
-    ok == null ? "bg-neutral-400" : ok ? "bg-green-500" : "bg-red-500";
+  const dot = ok == null ? "bg-sysgray" : ok ? "bg-success" : "bg-danger";
   const label = ok == null ? "Bridge…" : ok ? "Online" : "Offline";
 
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-black/5 bg-white/60 px-2.5 py-1 text-xs font-medium backdrop-blur dark:border-white/10 dark:bg-white/5">
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-fill-secondary px-2.5 py-1 text-caption2 text-label-secondary">
       <span className="relative flex h-2 w-2">
         {ok ? (
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-60" />
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />
         ) : null}
         <span className={cn("relative inline-flex h-2 w-2 rounded-full", dot)} />
       </span>
-      <span className="text-neutral-600 dark:text-neutral-300">{label}</span>
+      {label}
     </span>
   );
 }
