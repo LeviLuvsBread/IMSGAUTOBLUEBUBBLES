@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.imsgauto.pump</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/curl</string>
+    <string>-fsS</string>
+    <string>-m</string>
+    <string>50</string>
+    <string>-H</string>
+    <string>Authorization: Bearer __PUMP_SECRET__</string>
+    <string>https://__APP_HOST__/api/cron/pump</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>60</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/imsgauto-pump.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/imsgauto-pump.err</string>
+</dict>
+</plist>
