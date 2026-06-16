@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 import { signIn } from "./actions";
 
 export default async function LoginPage({
@@ -6,6 +8,14 @@ export default async function LoginPage({
   searchParams: Promise<{ error?: string; redirect?: string }>;
 }) {
   const sp = await searchParams;
+
+  // Already signed in? Skip the form. (Middleware no longer redirects away from
+  // /login on cookie presence, to avoid a redirect loop with stale cookies.)
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) redirect(sp.redirect ?? "/");
 
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
