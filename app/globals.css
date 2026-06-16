@@ -12,10 +12,54 @@ body {
 }
 
 body {
-  @apply bg-neutral-50 text-neutral-900 antialiased dark:bg-neutral-950 dark:text-neutral-100;
+  @apply bg-neutral-100 text-neutral-900 antialiased dark:bg-black dark:text-neutral-100;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* Respect iOS safe areas when installed as a PWA */
+/* Layered, depth-y app backdrop (subtle Apple-style color wash). */
+.app-bg {
+  background:
+    radial-gradient(1100px 560px at 100% -10%, rgba(10, 132, 255, 0.1), transparent 60%),
+    radial-gradient(900px 480px at -10% 110%, rgba(48, 209, 88, 0.07), transparent 55%);
+}
+
+/* Frosted-glass surfaces. */
+.glass {
+  @apply border border-white/50 bg-white/70 backdrop-blur-xl dark:border-white/10 dark:bg-neutral-900/55;
+}
+.glass-strong {
+  @apply border border-white/60 bg-white/85 backdrop-blur-2xl dark:border-white/10 dark:bg-neutral-900/80;
+}
+
+/* Thin, rounded scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 120, 128, 0.4) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(120, 120, 128, 0.35);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 120, 128, 0.55);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::selection {
+  background: rgba(10, 132, 255, 0.25);
+}
+
+/* Respect iOS safe areas when installed as a PWA. */
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom);
+}
+.safe-top {
+  padding-top: env(safe-area-inset-top);
 }
