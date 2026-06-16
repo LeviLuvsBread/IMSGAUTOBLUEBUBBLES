@@ -96,20 +96,21 @@ paste it, and enable at least `new-message` and `updated-message` (and
 now flow into the live inbox.
 
 ### 6. Driving the pump
-Vercel **Hobby** cron only runs **once per day**, which is fine as a safety
-backstop (`vercel.json` is set to a daily run) but not for throttled drip. Pick one:
+`vercel.json` is configured for a **per-minute** cron (`* * * * *`), which
+**requires the Vercel Pro plan** (Hobby cron only runs once per day and the
+per-minute schedule would fail at deploy). This is the default path — no pinger
+needed; Vercel calls `/api/cron/pump` every minute using `CRON_SECRET`.
 
-- **Free (recommended): ping from the always-on Mac.** It already runs 24/7 for
-  BlueBubbles, so it adds no new failure domain. On the Mac:
-  ```bash
-  ./ops/install-pinger.sh your-app.vercel.app "$PUMP_SECRET"
-  ```
-  This installs a launchd agent that curls `/api/cron/pump` every 60s.
-  (Or use a free service like cron-job.org with the same URL — see Settings.)
-- **Pro: per-minute Vercel cron.** Upgrade to Vercel Pro and change
-  `vercel.json` schedule to `"* * * * *"`, then redeploy. No pinger needed.
+Free alternative (if you ever drop to Hobby): change the schedule to a daily run
+and **ping from the always-on Mac** instead. It already runs 24/7 for
+BlueBubbles, so it adds no new failure domain:
+```bash
+./ops/install-pinger.sh your-app.vercel.app "$PUMP_SECRET"
+```
+This installs a launchd agent that curls `/api/cron/pump` every 60s. (cron-job.org
+works too — the Settings page shows the exact URL.)
 
-Both paths are safe to run simultaneously — sends are serialized in the DB.
+All paths are safe to run simultaneously — sends are serialized in the DB.
 
 ---
 
