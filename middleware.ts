@@ -27,7 +27,13 @@ export async function middleware(request: NextRequest) {
 
 // Run on everything EXCEPT static assets, PWA files, and the machine endpoints
 // (BlueBubbles webhook + Vercel cron), which authenticate themselves.
+//
+// runtime: "nodejs" — the Supabase SSR client transitively references
+// `process.version` (supabase-js constants), which the Edge Runtime forbids and
+// Vercel rejects at build time. Running middleware on the Node.js runtime removes
+// that constraint entirely, regardless of the installed supabase-js version.
 export const config = {
+  runtime: "nodejs",
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|icon.svg|manifest.webmanifest|apple-icon|api/webhook|api/cron).*)",
   ],
