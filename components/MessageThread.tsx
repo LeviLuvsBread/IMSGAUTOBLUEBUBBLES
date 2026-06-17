@@ -59,36 +59,48 @@ export function MessageThread({
 
   useEffect(() => {
     const supabase = createClient();
-    const channel = supabase
-      .channel(`thread-${chatGuid}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "messages" },
-        (payload) => {
-          const rec = (payload.new ?? payload.old) as Message;
-          if (!rec || rec.chat_guid !== chatGuid) return;
-          setMessages((prev) => {
-            if (payload.eventType === "INSERT") {
-              const m = payload.new as Message;
-              if (prev.some((x) => x.id === m.id)) return prev;
-              return [...prev, m].sort(byCreated);
-            }
-            if (payload.eventType === "UPDATE") {
-              const m = payload.new as Message;
-              return prev.map((x) => (x.id === m.id ? m : x)).sort(byCreated);
-            }
-            if (payload.eventType === "DELETE") {
-              const old = payload.old as Message;
-              return prev.filter((x) => x.id !== old.id);
-            }
-            return prev;
-          });
-        },
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
+    (async () => {
+      // Authenticate the realtime socket so RLS delivers our own message rows.
+      const { data } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (data.session?.access_token) {
+        supabase.realtime.setAuth(data.session.access_token);
+      }
+      channel = supabase
+        .channel(`thread-${chatGuid}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "messages" },
+          (payload) => {
+            const rec = (payload.new ?? payload.old) as Message;
+            if (!rec || rec.chat_guid !== chatGuid) return;
+            setMessages((prev) => {
+              if (payload.eventType === "INSERT") {
+                const m = payload.new as Message;
+                if (prev.some((x) => x.id === m.id)) return prev;
+                return [...prev, m].sort(byCreated);
+              }
+              if (payload.eventType === "UPDATE") {
+                const m = payload.new as Message;
+                return prev.map((x) => (x.id === m.id ? m : x)).sort(byCreated);
+              }
+              if (payload.eventType === "DELETE") {
+                const old = payload.old as Message;
+                return prev.filter((x) => x.id !== old.id);
+              }
+              return prev;
+            });
+          },
+        )
+        .subscribe();
+    })();
 
     return () => {
-      supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
     };
   }, [chatGuid]);
 

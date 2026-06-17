@@ -90,6 +90,82 @@ export async function toggleOptOut(formData: FormData) {
   revalidatePath("/contacts");
 }
 
+export type ImportRow = {
+  name: string;
+  phone: string;
+  email: string;
+  company: string;
+  tags: string[];
+};
+
+export type ImportResult = {
+  total: number;
+  inserted: number;
+  skippedNoPhone: number;
+  duplicatesInFile: number;
+  alreadyInList: number;
+};
+
+// Bulk CSV import. The client maps columns → fields and sends rows; we
+// normalize phones to E.164, dedupe, and upsert (ignoring existing duplicates
+// by the unique (owner_id, phone) constraint). RLS stamps/validates owner_id.
+export async function importContacts(rows: ImportRow[]): Promise<ImportResult> {
+  const { supabase, userId } = await requireUser();
+  const list = Array.isArray(rows) ? rows : [];
+  const seen = new Set<string>();
+  let skippedNoPhone = 0;
+  let duplicatesInFile = 0;
+  const toInsert: Record<string, unknown>[] = [];
+
+  for (const r of list) {
+    const phone = toE164(String(r?.phone ?? ""));
+    if (!/^\+[1-9]\d{6,14}$/.test(phone)) {
+      skippedNoPhone++;
+      continue;
+    }
+    if (seen.has(phone)) {
+      duplicatesInFile++;
+      continue;
+    }
+    seen.add(phone);
+    const name =
+      String(r?.name ?? "").trim() ||
+      String(r?.company ?? "").trim() ||
+      phone;
+    toInsert.push({
+      owner_id: userId,
+      name,
+      phone,
+      email: String(r?.email ?? "").trim() || null,
+      company: String(r?.company ?? "").trim() || null,
+      tags: Array.isArray(r?.tags)
+        ? r.tags.map((t) => String(t).trim()).filter(Boolean)
+        : [],
+      chat_guid: chatGuidForPhone(phone),
+    });
+  }
+
+  let inserted = 0;
+  for (let i = 0; i < toInsert.length; i += 200) {
+    const batch = toInsert.slice(i, i + 200);
+    const { data, error } = await supabase
+      .from("contacts")
+      .upsert(batch, { onConflict: "owner_id,phone", ignoreDuplicates: true })
+      .select("id");
+    if (error) throw new Error(error.message);
+    inserted += data?.length ?? 0;
+  }
+
+  revalidatePath("/contacts");
+  return {
+    total: list.length,
+    inserted,
+    skippedNoPhone,
+    duplicatesInFile,
+    alreadyInList: toInsert.length - inserted,
+  };
+}
+
 // ---------------- templates ----------------
 export async function saveTemplate(formData: FormData) {
   const { supabase, userId } = await requireUser();

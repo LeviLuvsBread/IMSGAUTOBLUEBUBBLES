@@ -230,11 +230,21 @@ h3,
     fill var(--dur-base) var(--ease-out) !important;
 }
 
-/* Focus ring. */
+/* Keyboard focus — a tight ring that hugs the control's own shape (modern
+   outline follows border-radius). Text inputs opt out: they signal focus via
+   the caret + their field styling, so we never wrap an input in a floating
+   outline box. */
 :focus-visible {
   outline: 2px solid rgb(var(--accent));
-  outline-offset: 3px;
-  border-radius: inherit;
+  outline-offset: 1px;
+}
+input:focus,
+input:focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible {
+  outline: none;
 }
 
 /* Tactile press feedback. */

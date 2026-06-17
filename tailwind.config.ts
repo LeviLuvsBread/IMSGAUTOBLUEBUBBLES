@@ -37,6 +37,7 @@ export default {
         label: {
           DEFAULT: "rgb(var(--label) / <alpha-value>)",
           secondary: "rgb(var(--label-secondary) / <alpha-value>)",
+          tertiary: "var(--label-tertiary)",
         },
         accent: {
           DEFAULT: "rgb(var(--accent) / <alpha-value>)",
