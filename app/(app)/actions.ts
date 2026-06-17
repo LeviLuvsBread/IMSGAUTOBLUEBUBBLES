@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { enqueueMessage, enqueueBulk, type EnqueueInput } from "@/lib/queue/enqueue";
 import { resolveSegment } from "@/lib/segments";
 import { renderForContact, extractVariables } from "@/lib/templating";
+import { STARTER_TEMPLATES } from "@/lib/starter-templates";
 import { toE164, chatGuidForPhone } from "@/lib/chat";
 import { runPump } from "@/lib/queue/pump";
 import type { Contact, Segment } from "@/lib/types";
@@ -167,6 +168,49 @@ export async function importContacts(rows: ImportRow[]): Promise<ImportResult> {
 }
 
 // ---------------- templates ----------------
+// Seeds the default outreach template library, skipping any already present
+// (matched by name) so it's safe to re-run from "Load starter pack".
+export async function seedStarterTemplates(): Promise<{
+  added: number;
+  skipped: number;
+}> {
+  const { supabase, userId } = await requireUser();
+  const { data: existing } = await supabase.from("templates").select("name");
+  const have = new Set(
+    (existing ?? []).map((t: { name: string }) => t.name.trim().toLowerCase()),
+  );
+  const toAdd = STARTER_TEMPLATES.filter(
+    (t) => !have.has(t.name.trim().toLowerCase()),
+  ).map((t) => ({
+    owner_id: userId,
+    name: t.name,
+    body: t.body,
+    variables: extractVariables(t.body),
+  }));
+  if (toAdd.length) await supabase.from("templates").insert(toAdd);
+  revalidatePath("/templates");
+  return { added: toAdd.length, skipped: STARTER_TEMPLATES.length - toAdd.length };
+}
+
+// Returns the BlueBubbles webhook + pump URLs WITH their secrets. These are
+// kept out of the Settings HTML on first load; the client fetches them only
+// when the owner explicitly reveals/copies, so the secret never sits in the
+// page source or dev-tools view. Guarded by the auth check.
+export async function getSetupUrls(): Promise<{
+  webhookUrl: string;
+  pumpUrl: string;
+}> {
+  await requireUser();
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ?? "https://your-app.vercel.app";
+  const webhookSecret = process.env.WEBHOOK_SECRET ?? "YOUR_WEBHOOK_SECRET";
+  const pumpSecret = process.env.PUMP_SECRET ?? "YOUR_PUMP_SECRET";
+  return {
+    webhookUrl: `${appUrl}/api/webhook?secret=${webhookSecret}`,
+    pumpUrl: `curl -fsS "${appUrl}/api/cron/pump?key=${pumpSecret}"`,
+  };
+}
+
 export async function saveTemplate(formData: FormData) {
   const { supabase, userId } = await requireUser();
   const id = String(formData.get("id") ?? "").trim();

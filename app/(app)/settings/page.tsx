@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { saveSettings } from "../actions";
+import { SecretCodeCard } from "@/components/SecretCodeCard";
 import { THROTTLE_DEFAULTS } from "@/lib/throttle";
 import type { AppSettings } from "@/lib/types";
 
@@ -123,25 +124,6 @@ function ToggleRow({
   );
 }
 
-function CodeCard({
-  label,
-  desc,
-  code,
-}: {
-  label: string;
-  desc: React.ReactNode;
-  code: string;
-}) {
-  return (
-    <div className="rounded-card bg-surface p-4 ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-      <p className="text-subhead font-semibold">{label}</p>
-      <p className="mt-0.5 text-caption text-label-secondary">{desc}</p>
-      <code className="mt-2 block overflow-x-auto rounded-control bg-fill px-3 py-2 font-mono text-caption">
-        {code}
-      </code>
-    </div>
-  );
-}
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -152,11 +134,8 @@ export default async function SettingsPage() {
     .maybeSingle();
   const s = (data as AppSettings | null) ?? null;
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://your-app.vercel.app";
-  const webhookSecret = process.env.WEBHOOK_SECRET ?? "YOUR_WEBHOOK_SECRET";
-  const pumpSecret = process.env.PUMP_SECRET ?? "YOUR_PUMP_SECRET";
-  const webhookUrl = `${appUrl}/api/webhook?secret=${webhookSecret}`;
-  const pumpUrl = `${appUrl}/api/cron/pump?key=${pumpSecret}`;
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ?? "https://your-app.vercel.app";
 
   return (
     <div className="mx-auto max-w-2xl space-y-8">
@@ -276,15 +255,17 @@ export default async function SettingsPage() {
         }
       >
         <div className="space-y-3">
-          <CodeCard
+          <SecretCodeCard
+            kind="webhook"
+            appUrl={appUrl}
             label="Webhook URL"
-            desc="BlueBubbles → API & Webhooks → Add Webhook → paste this, and enable new-message + updated-message (and server-url-change if available)."
-            code={webhookUrl}
+            desc="BlueBubbles → API & Webhooks → Add Webhook → paste this, and enable New Messages (plus New Server URL if available). Tap the eye to reveal or the copy button to grab it."
           />
-          <CodeCard
+          <SecretCodeCard
+            kind="pump"
+            appUrl={appUrl}
             label="Pump URL (external pinger)"
             desc="Hit this every ~minute from the always-on Mac (launchd) or cron-job.org to drip the queue. Vercel Cron also calls /api/cron/pump with CRON_SECRET."
-            code={`curl -fsS "${pumpUrl}"`}
           />
         </div>
       </Section>

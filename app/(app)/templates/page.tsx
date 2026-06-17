@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { TemplateForm } from "@/components/TemplateForm";
+import { SeedTemplatesButton } from "@/components/SeedTemplatesButton";
 import { deleteTemplate } from "../actions";
 import type { Template } from "@/lib/types";
 
@@ -16,14 +17,24 @@ export default async function TemplatesPage() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <p className="text-footnote text-label-secondary tabular-nums">
+            {templates.length} total
+          </p>
+          <h1 className="text-h4 font-display">Templates</h1>
+        </div>
+        <SeedTemplatesButton />
+      </div>
+
       <div className="max-w-xl">
-        <h1 className="mb-3 text-lg font-semibold">New template</h1>
+        <h2 className="mb-3 text-subhead font-semibold">New template</h2>
         <TemplateForm />
       </div>
 
       <div>
-        <h2 className="mb-2 text-sm font-semibold text-neutral-500">
-          {templates.length} templates
+        <h2 className="mb-2 text-footnote font-medium text-label-secondary">
+          {templates.length} saved
         </h2>
         {templates.length === 0 ? (
           <p className="text-sm text-neutral-400">No templates yet.</p>

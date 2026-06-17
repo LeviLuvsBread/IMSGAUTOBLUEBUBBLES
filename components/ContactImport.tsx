@@ -67,7 +67,32 @@ export function ContactImport() {
 
   const onFile = async (file: File | undefined) => {
     if (!file) return;
-    const parsed = parseCsv(await file.text());
+    const name = file.name.toLowerCase();
+    let parsed: { headers: string[]; rows: string[][] };
+    try {
+      if (name.endsWith(".csv") || name.endsWith(".txt") || file.type === "text/csv") {
+        // Lightweight path for plain CSV — no need to load the xlsx parser.
+        parsed = parseCsv(await file.text());
+      } else {
+        // Excel (.xlsx/.xls), OpenDocument (.ods), and TSV — parsed by SheetJS,
+        // loaded on demand so it never bloats the rest of the app.
+        const XLSX = await import("xlsx");
+        const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const aoa = XLSX.utils.sheet_to_json(ws, {
+          header: 1,
+          raw: false,
+          defval: "",
+          blankrows: false,
+        }) as unknown[][];
+        const grid = aoa
+          .map((r) => (Array.isArray(r) ? r.map((c) => String(c ?? "").trim()) : []))
+          .filter((r) => r.some((c) => c.length > 0));
+        parsed = { headers: grid[0] ?? [], rows: grid.slice(1) };
+      }
+    } catch {
+      parsed = { headers: [], rows: [] };
+    }
     if (parsed.headers.length === 0) return;
     setFileName(file.name);
     setHeaders(parsed.headers);
@@ -122,7 +147,7 @@ export function ContactImport() {
         onClick={() => setOpen(true)}
         className="press inline-flex items-center gap-2 rounded-control bg-accent px-4 py-2 text-subhead font-semibold text-white"
       >
-        <Upload className="h-4 w-4" /> Import CSV
+        <Upload className="h-4 w-4" /> Import
       </button>
 
       <AnimatePresence>
@@ -169,8 +194,10 @@ export function ContactImport() {
                     <span className="flex h-12 w-12 items-center justify-center rounded-card bg-accent/10 text-accent">
                       <FileSpreadsheet className="h-6 w-6" />
                     </span>
-                    <span className="text-subhead font-medium">Choose a CSV file</span>
+                    <span className="text-subhead font-medium">Choose a spreadsheet</span>
                     <span className="text-caption text-label-secondary">
+                      CSV, Excel (.xlsx, .xls), or Numbers/Sheets export (.ods)
+                      <br />
                       Headers in the first row · phone numbers in any format
                     </span>
                   </button>
@@ -317,7 +344,7 @@ export function ContactImport() {
       <input
         ref={fileRef}
         type="file"
-        accept=".csv,text/csv"
+        accept=".csv,.tsv,.txt,.xlsx,.xls,.ods,text/csv,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.oasis.opendocument.spreadsheet"
         className="hidden"
         onChange={(e) => onFile(e.target.files?.[0])}
       />
