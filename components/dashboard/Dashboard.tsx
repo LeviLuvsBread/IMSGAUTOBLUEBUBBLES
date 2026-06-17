@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Tooltip } from "@/components/Tooltip";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 
 type Reply = { id: string; chatGuid: string; body: string };
 type Failed = { id: string; chatGuid: string; body: string; error: string | null };
@@ -48,7 +49,7 @@ const item: Variants = {
 };
 
 const cardBase =
-  "rounded-card bg-surface shadow-card ring-1 ring-black/[0.04] dark:ring-white/[0.06]";
+  "rounded-card bg-surface shadow-card ring-1 ring-black/[0.05] dark:ring-white/[0.08]";
 
 function greeting() {
   const h = new Date().getHours();
@@ -83,6 +84,12 @@ function Ring({ value, max }: { value: number; max: number }) {
   const c = 2 * Math.PI * r;
   return (
     <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">
+      <defs>
+        <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="rgb(var(--accent))" />
+          <stop offset="100%" stopColor="rgb(var(--accent-2))" />
+        </linearGradient>
+      </defs>
       <circle
         cx="32"
         cy="32"
@@ -98,7 +105,8 @@ function Ring({ value, max }: { value: number; max: number }) {
         fill="none"
         strokeWidth="6"
         strokeLinecap="round"
-        className={cn(pct >= 1 ? "stroke-warning" : "stroke-accent")}
+        className={cn(pct >= 1 && "stroke-warning")}
+        stroke={pct >= 1 ? undefined : "url(#ringGrad)"}
         strokeDasharray={c}
         initial={{ strokeDashoffset: c }}
         animate={{ strokeDashoffset: c * (1 - pct) }}
@@ -253,7 +261,7 @@ export function Dashboard({
           <Ring value={sentToday} max={dailyCap} />
           <div>
             <div className="text-h5 tabular-nums">
-              {sentToday}
+              <AnimatedNumber value={sentToday} />
               <span className="text-title3 text-label-secondary">/{dailyCap}</span>
             </div>
             <div className="text-footnote text-label-secondary">Sent today</div>
@@ -262,7 +270,7 @@ export function Dashboard({
         <StatCard
           icon={Clock}
           label="Queued"
-          value={queued}
+          value={<AnimatedNumber value={queued} />}
           tone="blue"
           sub="waiting to send"
           info="Messages waiting in line. They drip out automatically under your throttle settings — you don’t need to do anything."
@@ -270,7 +278,7 @@ export function Dashboard({
         <StatCard
           icon={AlertTriangle}
           label="Failed"
-          value={failed}
+          value={<AnimatedNumber value={failed} />}
           tone={failed > 0 ? "red" : "neutral"}
           sub="needs attention"
           info="Sends that didn’t go through (bridge offline, bad number, etc.). Use Requeue below to try them again."

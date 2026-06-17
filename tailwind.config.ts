@@ -2,6 +2,7 @@ import type { Config } from "tailwindcss";
 
 export default {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
+  darkMode: "class",
   theme: {
     extend: {
       fontFamily: {
@@ -40,6 +41,7 @@ export default {
         accent: {
           DEFAULT: "rgb(var(--accent) / <alpha-value>)",
           cta: "rgb(var(--accent-cta) / <alpha-value>)",
+          "2": "rgb(var(--accent-2) / <alpha-value>)",
         },
         link: "rgb(var(--link) / <alpha-value>)",
         success: "rgb(var(--success) / <alpha-value>)",
@@ -93,6 +95,7 @@ export default {
         elevated: "0 4px 16px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)",
         overlay: "0 12px 40px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.08)",
         switch: "0 3px 8px rgba(0,0,0,0.15), 0 1px 1px rgba(0,0,0,0.16)",
+        glow: "0 8px 30px -8px rgb(var(--accent) / 0.55)",
       },
       transitionTimingFunction: {
         ios: "cubic-bezier(0,0,0.58,1)",

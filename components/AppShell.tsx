@@ -8,6 +8,7 @@ import { MessageCircle, Search } from "lucide-react";
 import { NAV_ITEMS } from "./nav-items";
 import { HealthBadge } from "./HealthBadge";
 import { CommandPalette } from "./CommandPalette";
+import { ThemeToggle } from "./ThemeToggle";
 import { Tooltip } from "./Tooltip";
 import { cn } from "@/lib/cn";
 
@@ -28,6 +29,8 @@ function Shortcut({ k }: { k: string }) {
     </span>
   );
 }
+
+const markGlow = "shadow-[0_4px_14px_-4px_rgb(var(--accent)/0.65)]";
 
 export function AppShell({
   children,
@@ -108,7 +111,7 @@ export function AppShell({
       {/* Sidebar — desktop */}
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-0.5 border-r border-separator px-3 py-4 md:flex">
         <Link href="/" className="mb-4 flex items-center gap-2.5 px-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-row bg-accent text-white">
+          <span className={cn("flex h-8 w-8 items-center justify-center rounded-row brand-gradient text-white", markGlow)}>
             <MessageCircle className="h-[18px] w-[18px]" />
           </span>
           <span className="text-[17px] font-semibold tracking-[-0.022em]">Outreach</span>
@@ -151,7 +154,7 @@ export function AppShell({
                     <motion.span
                       layoutId="nav-active"
                       className="absolute inset-0 -z-0 rounded-row bg-accent/10"
-                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                      transition={{ type: "spring", stiffness: 480, damping: 34 }}
                     />
                   ) : null}
                   <Icon className="relative z-10 h-[18px] w-[18px]" />
@@ -162,15 +165,18 @@ export function AppShell({
           })}
         </nav>
 
-        <div className="mt-auto flex items-center justify-between gap-2 px-1">
-          <HealthBadge />
-          <form action={signOut}>
-            <Tooltip side="top" label="Sign out of the dashboard">
-              <button className="text-footnote text-label-secondary transition-colors duration-fast ease-ios hover:text-label">
-                Sign out
-              </button>
-            </Tooltip>
-          </form>
+        <div className="mt-auto space-y-3 px-1 pt-3">
+          <ThemeToggle />
+          <div className="flex items-center justify-between gap-2">
+            <HealthBadge />
+            <form action={signOut}>
+              <Tooltip side="top" label="Sign out of the dashboard">
+                <button className="text-footnote text-label-secondary transition-colors duration-fast ease-ios hover:text-label">
+                  Sign out
+                </button>
+              </Tooltip>
+            </form>
+          </div>
         </div>
       </aside>
 
@@ -178,7 +184,7 @@ export function AppShell({
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="glass hairline-b safe-top sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-2 md:hidden">
-            <span className="flex h-7 w-7 items-center justify-center rounded-row bg-accent text-white">
+            <span className={cn("flex h-7 w-7 items-center justify-center rounded-row brand-gradient text-white", markGlow)}>
               <MessageCircle className="h-4 w-4" />
             </span>
             <span className="text-[17px] font-semibold tracking-[-0.022em]">Outreach</span>
@@ -187,6 +193,9 @@ export function AppShell({
             {pageTitle(pathname)}
           </h1>
           <div className="flex items-center gap-2">
+            <span className="md:hidden">
+              <ThemeToggle />
+            </span>
             <Tooltip side="bottom" className="md:hidden" label="Search · ⌘K">
               <button
                 onClick={() => setPaletteOpen(true)}
@@ -210,7 +219,7 @@ export function AppShell({
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.25, ease: [0, 0, 0.58, 1] }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
               >
                 {children}
               </motion.div>
