@@ -8,12 +8,25 @@ import { MessageCircle, Search } from "lucide-react";
 import { NAV_ITEMS } from "./nav-items";
 import { HealthBadge } from "./HealthBadge";
 import { CommandPalette } from "./CommandPalette";
+import { Tooltip } from "./Tooltip";
 import { cn } from "@/lib/cn";
 
 function pageTitle(pathname: string) {
   if (pathname === "/") return "Home";
   const item = NAV_ITEMS.find((n) => n.href !== "/" && pathname.startsWith(n.href));
   return item?.label ?? "";
+}
+
+function Shortcut({ k }: { k: string }) {
+  return (
+    <span>
+      Press{" "}
+      <kbd className="rounded bg-white/15 px-1 py-0.5 font-sans">G</kbd> then{" "}
+      <kbd className="rounded bg-white/15 px-1 py-0.5 font-sans">
+        {k === "," ? "," : k.toUpperCase()}
+      </kbd>
+    </span>
+  );
 }
 
 export function AppShell({
@@ -101,42 +114,50 @@ export function AppShell({
           <span className="text-[17px] font-semibold tracking-[-0.022em]">Outreach</span>
         </Link>
 
-        <button
-          onClick={() => setPaletteOpen(true)}
-          className="press mb-3 flex items-center gap-2 rounded-row bg-fill px-3 py-2 text-reduced text-label-secondary transition-colors duration-fast ease-ios hover:bg-fill-secondary"
-        >
-          <Search className="h-3.5 w-3.5" />
-          <span className="flex-1 text-left">Search</span>
-          <kbd className="rounded-control bg-fill-secondary px-1.5 py-0.5 text-caption2 text-label-secondary">
-            ⌘K
-          </kbd>
-        </button>
+        <Tooltip side="right" className="mb-3 w-full" label="Search & commands · ⌘K">
+          <button
+            onClick={() => setPaletteOpen(true)}
+            className="press flex w-full items-center gap-2 rounded-row bg-fill px-3 py-2 text-reduced text-label-secondary transition-colors duration-fast ease-ios hover:bg-fill-secondary"
+          >
+            <Search className="h-3.5 w-3.5" />
+            <span className="flex-1 text-left">Search</span>
+            <kbd className="rounded-control bg-fill-secondary px-1.5 py-0.5 text-caption2 text-label-secondary">
+              ⌘K
+            </kbd>
+          </button>
+        </Tooltip>
 
         <nav className="flex flex-1 flex-col gap-0.5">
           {NAV_ITEMS.map((n) => {
             const active = isActive(n.href);
             const Icon = n.icon;
             return (
-              <Link
+              <Tooltip
                 key={n.href}
-                href={n.href}
-                className={cn(
-                  "group relative flex items-center gap-3 rounded-row px-3 py-2 text-reduced font-medium transition-colors duration-fast ease-ios",
-                  active
-                    ? "text-accent"
-                    : "text-label-secondary hover:bg-fill-tertiary",
-                )}
+                side="right"
+                className="w-full"
+                label={<Shortcut k={n.key} />}
               >
-                {active ? (
-                  <motion.span
-                    layoutId="nav-active"
-                    className="absolute inset-0 -z-0 rounded-row bg-accent/10"
-                    transition={{ type: "spring", stiffness: 420, damping: 34 }}
-                  />
-                ) : null}
-                <Icon className="relative z-10 h-[18px] w-[18px]" />
-                <span className="relative z-10">{n.label}</span>
-              </Link>
+                <Link
+                  href={n.href}
+                  className={cn(
+                    "group relative flex w-full items-center gap-3 rounded-row px-3 py-2 text-reduced font-medium transition-colors duration-fast ease-ios",
+                    active
+                      ? "text-accent"
+                      : "text-label-secondary hover:bg-fill-tertiary",
+                  )}
+                >
+                  {active ? (
+                    <motion.span
+                      layoutId="nav-active"
+                      className="absolute inset-0 -z-0 rounded-row bg-accent/10"
+                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                    />
+                  ) : null}
+                  <Icon className="relative z-10 h-[18px] w-[18px]" />
+                  <span className="relative z-10">{n.label}</span>
+                </Link>
+              </Tooltip>
             );
           })}
         </nav>
@@ -144,9 +165,11 @@ export function AppShell({
         <div className="mt-auto flex items-center justify-between gap-2 px-1">
           <HealthBadge />
           <form action={signOut}>
-            <button className="text-footnote text-label-secondary transition-colors duration-fast ease-ios hover:text-label">
-              Sign out
-            </button>
+            <Tooltip side="top" label="Sign out of the dashboard">
+              <button className="text-footnote text-label-secondary transition-colors duration-fast ease-ios hover:text-label">
+                Sign out
+              </button>
+            </Tooltip>
           </form>
         </div>
       </aside>
@@ -164,15 +187,17 @@ export function AppShell({
             {pageTitle(pathname)}
           </h1>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPaletteOpen(true)}
-              aria-label="Search"
-              className="press flex h-8 w-8 items-center justify-center rounded-full bg-fill text-label-secondary md:hidden"
-            >
-              <Search className="h-4 w-4" />
-            </button>
+            <Tooltip side="bottom" className="md:hidden" label="Search · ⌘K">
+              <button
+                onClick={() => setPaletteOpen(true)}
+                aria-label="Search"
+                className="press flex h-8 w-8 items-center justify-center rounded-full bg-fill text-label-secondary"
+              >
+                <Search className="h-4 w-4" />
+              </button>
+            </Tooltip>
             <span className="md:hidden">
-              <HealthBadge />
+              <HealthBadge side="bottom" />
             </span>
           </div>
         </header>

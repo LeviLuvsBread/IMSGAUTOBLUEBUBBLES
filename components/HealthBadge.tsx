@@ -2,8 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
+import { Tooltip } from "./Tooltip";
 
-export function HealthBadge() {
+export function HealthBadge({
+  side = "top",
+}: {
+  side?: "top" | "bottom" | "left" | "right";
+}) {
   const [ok, setOk] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -27,16 +32,24 @@ export function HealthBadge() {
 
   const dot = ok == null ? "bg-sysgray" : ok ? "bg-success" : "bg-danger";
   const label = ok == null ? "Bridge…" : ok ? "Online" : "Offline";
+  const tip =
+    ok == null
+      ? "Checking your Mac’s BlueBubbles bridge…"
+      : ok
+        ? "BlueBubbles bridge is online — able to send & receive iMessages."
+        : "BlueBubbles bridge is offline. Start your Mac’s BlueBubbles server / tunnel to send.";
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-fill-secondary px-2.5 py-1 text-caption2 text-label-secondary">
-      <span className="relative flex h-2 w-2">
-        {ok ? (
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />
-        ) : null}
-        <span className={cn("relative inline-flex h-2 w-2 rounded-full", dot)} />
+    <Tooltip side={side} label={tip}>
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-fill-secondary px-2.5 py-1 text-caption2 text-label-secondary">
+        <span className="relative flex h-2 w-2">
+          {ok ? (
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />
+          ) : null}
+          <span className={cn("relative inline-flex h-2 w-2 rounded-full", dot)} />
+        </span>
+        {label}
       </span>
-      {label}
-    </span>
+    </Tooltip>
   );
 }

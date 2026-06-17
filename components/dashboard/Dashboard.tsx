@@ -13,9 +13,11 @@ import {
   Pause,
   RotateCcw,
   ChevronRight,
+  Info,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { Tooltip } from "@/components/Tooltip";
 
 type Reply = { id: string; chatGuid: string; body: string };
 type Failed = { id: string; chatGuid: string; body: string; error: string | null };
@@ -60,6 +62,21 @@ function initials(s: string) {
   return (m.slice(0, 2) || "··").toUpperCase();
 }
 
+/** Small "ⓘ" affordance with an explanatory tooltip (hover or tap/focus). */
+function InfoDot({ tip }: { tip: string }) {
+  return (
+    <Tooltip side="left" className="absolute right-3 top-3" label={tip}>
+      <button
+        type="button"
+        aria-label="What does this mean?"
+        className="text-label-tertiary transition-colors duration-fast ease-ios hover:text-label-secondary"
+      >
+        <Info className="h-4 w-4" />
+      </button>
+    </Tooltip>
+  );
+}
+
 function Ring({ value, max }: { value: number; max: number }) {
   const pct = max > 0 ? Math.min(value / max, 1) : 0;
   const r = 26;
@@ -97,12 +114,14 @@ function StatCard({
   value,
   sub,
   tone,
+  info,
 }: {
   icon: LucideIcon;
   label: string;
   value: React.ReactNode;
   sub: string;
   tone: "blue" | "red" | "neutral";
+  info: string;
 }) {
   const toneCls =
     tone === "red"
@@ -111,7 +130,8 @@ function StatCard({
         ? "text-accent bg-accent/10"
         : "text-label-secondary bg-fill-tertiary";
   return (
-    <motion.div variants={item} className={cn(cardBase, "p-5")}>
+    <motion.div variants={item} className={cn(cardBase, "relative p-5")}>
+      <InfoDot tip={info} />
       <span
         className={cn(
           "mb-3 inline-flex h-8 w-8 items-center justify-center rounded-control",
@@ -148,9 +168,7 @@ function Action({
         transition={{ type: "spring", stiffness: 500, damping: 30 }}
         className={cn(
           "flex h-full items-center gap-3 rounded-card p-4",
-          primary
-            ? "bg-accent text-white shadow-card"
-            : cardBase,
+          primary ? "bg-accent text-white shadow-card" : cardBase,
         )}
       >
         <span
@@ -202,15 +220,24 @@ export function Dashboard({
           <p className="text-footnote text-label-secondary">{greeting()}</p>
           <h1 className="text-h4 font-display">Dashboard</h1>
         </div>
-        {paused ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-3 py-1 text-caption font-medium text-warning">
-            <Pause className="h-3 w-3" /> Paused
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-caption font-medium text-success">
-            <CheckCircle2 className="h-3 w-3" /> Active
-          </span>
-        )}
+        <Tooltip
+          side="left"
+          label={
+            paused
+              ? "Sending is paused — nothing goes out until you resume it in Settings."
+              : "The send pump is active and sending on your throttle schedule."
+          }
+        >
+          {paused ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-3 py-1 text-caption font-medium text-warning">
+              <Pause className="h-3 w-3" /> Paused
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-caption font-medium text-success">
+              <CheckCircle2 className="h-3 w-3" /> Active
+            </span>
+          )}
+        </Tooltip>
       </motion.div>
 
       {/* Stat cards */}
@@ -220,8 +247,9 @@ export function Dashboard({
       >
         <motion.div
           variants={item}
-          className={cn(cardBase, "col-span-2 flex items-center gap-4 p-5 lg:col-span-1")}
+          className={cn(cardBase, "relative col-span-2 flex items-center gap-4 p-5 lg:col-span-1")}
         >
+          <InfoDot tip="Messages sent today vs. your daily cap. The cap keeps your number under informal limits so it doesn’t get flagged — raise it slowly." />
           <Ring value={sentToday} max={dailyCap} />
           <div>
             <div className="text-h5 tabular-nums">
@@ -237,6 +265,7 @@ export function Dashboard({
           value={queued}
           tone="blue"
           sub="waiting to send"
+          info="Messages waiting in line. They drip out automatically under your throttle settings — you don’t need to do anything."
         />
         <StatCard
           icon={AlertTriangle}
@@ -244,6 +273,7 @@ export function Dashboard({
           value={failed}
           tone={failed > 0 ? "red" : "neutral"}
           sub="needs attention"
+          info="Sends that didn’t go through (bridge offline, bad number, etc.). Use Requeue below to try them again."
         />
         <StatCard
           icon={TrendingUp}
@@ -251,6 +281,7 @@ export function Dashboard({
           value={`${minDelay}–${maxDelay}s`}
           tone="neutral"
           sub="delay between sends"
+          info="A random pause between each send so your texting looks human. Adjust the min delay and jitter in Settings."
         />
       </motion.div>
 
@@ -331,10 +362,7 @@ export function Dashboard({
           </h2>
           <ul>
             {failedRows.map((m) => (
-              <li
-                key={m.id}
-                className="flex items-center gap-3 px-3 py-2"
-              >
+              <li key={m.id} className="flex items-center gap-3 px-3 py-2">
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-subhead">{m.body}</span>
                   <span className="block truncate text-caption text-label-secondary">
@@ -344,9 +372,11 @@ export function Dashboard({
                 </span>
                 <form action={requeue}>
                   <input type="hidden" name="id" value={m.id} />
-                  <button className="press flex items-center gap-1 rounded-control border border-hairline px-2.5 py-1 text-footnote transition-colors duration-fast ease-ios hover:bg-fill-tertiary">
-                    <RotateCcw className="h-3 w-3" /> Requeue
-                  </button>
+                  <Tooltip side="left" label="Put this message back in the send queue to try again.">
+                    <button className="press flex items-center gap-1 rounded-control border border-hairline px-2.5 py-1 text-footnote transition-colors duration-fast ease-ios hover:bg-fill-tertiary">
+                      <RotateCcw className="h-3 w-3" /> Requeue
+                    </button>
+                  </Tooltip>
                 </form>
               </li>
             ))}
