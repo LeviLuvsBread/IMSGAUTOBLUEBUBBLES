@@ -16,5 +16,12 @@ export default async function AppLayout({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Enforce 2FA: if a factor is enrolled but the session is still aal1, the
+  // user must complete the authenticator challenge before reaching the app.
+  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (aal?.currentLevel === "aal1" && aal?.nextLevel === "aal2") {
+    redirect("/login/verify");
+  }
+
   return <AppShell signOut={signOut}>{children}</AppShell>;
 }

@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { saveSettings } from "../actions";
 import { SecretCodeCard } from "@/components/SecretCodeCard";
+import { TwoFactorSetup } from "@/components/TwoFactorSetup";
 import { THROTTLE_DEFAULTS } from "@/lib/throttle";
 import type { AppSettings } from "@/lib/types";
 
@@ -237,6 +239,21 @@ export default async function SettingsPage() {
           Save settings
         </button>
       </form>
+
+      <Section
+        title="Security"
+        footnote="Add a second factor for sign-in. Changing your password signs you out so you re-enter it on the next login."
+      >
+        <div className="space-y-3">
+          <TwoFactorSetup />
+          <Link
+            href="/reset"
+            className="press inline-flex items-center gap-2 rounded-control border border-hairline px-4 py-2 text-subhead font-medium transition-colors duration-fast ease-ios hover:bg-fill-tertiary"
+          >
+            Change password
+          </Link>
+        </div>
+      </Section>
 
       <Section
         title="Wire up BlueBubbles & the pump"

@@ -1,16 +1,20 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { AuthShell } from "@/components/AuthShell";
+import { authInputCls, authButtonCls } from "@/lib/auth-ui";
 import { signIn } from "./actions";
+
+export const dynamic = "force-dynamic";
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; redirect?: string }>;
+  searchParams: Promise<{ error?: string; redirect?: string; reset?: string }>;
 }) {
   const sp = await searchParams;
 
-  // Already signed in? Skip the form. (Middleware no longer redirects away from
-  // /login on cookie presence, to avoid a redirect loop with stale cookies.)
+  // Already signed in? Skip the form.
   const supabase = await createClient();
   const {
     data: { user },
@@ -18,53 +22,59 @@ export default async function LoginPage({
   if (user) redirect(sp.redirect ?? "/");
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-6">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-        <div className="mb-6 flex items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icon.svg" alt="" className="h-10 w-10" />
-          <div>
-            <h1 className="text-lg font-semibold">iMessage Outreach</h1>
-            <p className="text-sm text-neutral-500">Private dashboard — sign in</p>
-          </div>
+    <AuthShell>
+      <h2 className="text-callout font-semibold">Sign in</h2>
+
+      {sp.reset ? (
+        <div className="mt-3 rounded-control bg-success/10 px-3 py-2 text-footnote text-label">
+          Password updated — sign in with your new password.
         </div>
+      ) : null}
+      {sp.error ? (
+        <div className="mt-3 rounded-control bg-danger/10 px-3 py-2 text-footnote text-danger">
+          {sp.error}
+        </div>
+      ) : null}
 
-        {sp.error ? (
-          <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
-            {sp.error}
-          </p>
-        ) : null}
+      <form action={signIn} className="mt-4 space-y-3">
+        <input type="hidden" name="redirect" value={sp.redirect ?? "/"} />
+        <div>
+          <label htmlFor="email" className="sr-only">
+            Email
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            required
+            autoComplete="username"
+            placeholder="Email"
+            className={authInputCls}
+          />
+        </div>
+        <div>
+          <label htmlFor="password" className="sr-only">
+            Password
+          </label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            required
+            autoComplete="current-password"
+            placeholder="Password"
+            className={authInputCls}
+          />
+        </div>
+        <button className={authButtonCls}>Sign in</button>
+      </form>
 
-        <form action={signIn} className="space-y-3">
-          <input type="hidden" name="redirect" value={sp.redirect ?? "/"} />
-          <div>
-            <label className="mb-1 block text-sm font-medium">Email</label>
-            <input
-              name="email"
-              type="email"
-              required
-              autoComplete="username"
-              className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-imsg-blue dark:border-neutral-700 dark:bg-neutral-800"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Password</label>
-            <input
-              name="password"
-              type="password"
-              required
-              autoComplete="current-password"
-              className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-imsg-blue dark:border-neutral-700 dark:bg-neutral-800"
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full rounded-lg bg-imsg-blue px-3 py-2 text-sm font-medium text-white transition hover:opacity-90"
-          >
-            Sign in
-          </button>
-        </form>
-      </div>
-    </main>
+      <Link
+        href="/forgot"
+        className="mt-4 block text-center text-footnote text-accent hover:underline"
+      >
+        Forgot your password?
+      </Link>
+    </AuthShell>
   );
 }
