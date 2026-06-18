@@ -26,7 +26,7 @@ export interface LifecycleResult {
 
 const SYSTEM = `You track where a business-funding outreach conversation stands and decide when it's ready to hand to a human closer.
 Stages, in order: new → engaged → warming → interested → ready_for_handover → handed_off → closed.
-The AI's job is only to re-warm and engage; a HUMAN closes. Mark ready_for_handover when the merchant shows real buying intent — e.g. asks how to get started, willingly shares qualifying details, asks to speak with someone, or is clearly ready to move. Do NOT mark ready just for being polite or replying once.
+The AI keeps engaging and qualifying on its own. Set ready_for_handover = true ONLY when the lead either (a) explicitly wants to book/schedule a meeting or call, OR (b) confirms they have signed the application or uploaded their documents / bank statements via the link. Simply answering qualifying questions (amount, revenue, business type, time in business) is NOT enough — in that case set ready_for_handover = false and keep driving them toward the intake link or a meeting. Advance the stage (engaged/warming/interested) to reflect progress, but never hand off early.
 Respond with ONLY a JSON object:
 {
   "stage": one of new|engaged|warming|interested|ready_for_handover|handed_off|closed,

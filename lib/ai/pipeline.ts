@@ -193,7 +193,10 @@ export async function runPipeline(
     if (o.lifecycle_signal) lifecycleSignal = o.lifecycle_signal;
   };
 
-  // 1. Context stages — may opt-out / escalate / drop before any draft.
+  // 1. Context stages (classify/research) are ANALYSIS ONLY. They may flag an
+  //    opt-out, but they must NOT end the pipeline (no escalate/reject/no_reply)
+  //    — that is the judges' job. This stops a stray "all info gathered →
+  //    escalate" from a context stage silently killing the reply.
   for (const stage of enabled.filter(
     (s) => s.kind === "classify" || s.kind === "research",
   )) {
@@ -201,9 +204,6 @@ export async function runPipeline(
     const out = await runStage(stage, ctxNow, trace);
     merge(out);
     if (out.verdict === "opt_out") return mk("opted_out", null);
-    if (out.verdict === "no_reply" || out.verdict === "reject")
-      return mk("no_reply", null);
-    if (out.verdict === "escalate") return mk("escalated", null, out.escalation_reason);
     ctx.analyses.push({ stage: stage.name, analysis: out.analysis });
   }
 
