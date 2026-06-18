@@ -51,10 +51,20 @@ export async function POST(request: Request) {
         await reconcileOutbound(admin, { ...msg, errorCode: msg.errorCode || 1 });
         break;
       }
-      case "server-url-change": {
-        const d = data as { url?: string; serverUrl?: string } | string | undefined;
+      // BlueBubbles labels this "New Server URL"; the event type it sends is
+      // "new-server-url" (older builds used "server-url-change"). The payload
+      // may be the raw URL string or an object — handle every shape.
+      case "new-server-url":
+      case "server-url-change":
+      case "server-url": {
+        const d = data as
+          | { url?: string; serverUrl?: string; server_url?: string }
+          | string
+          | undefined;
         const newUrl =
-          typeof d === "string" ? d : (d?.url ?? d?.serverUrl ?? null);
+          typeof d === "string"
+            ? d
+            : (d?.url ?? d?.serverUrl ?? d?.server_url ?? null);
         if (newUrl) {
           await admin
             .from("app_settings")
