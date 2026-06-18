@@ -3,8 +3,13 @@ import { createAdminClient, appOwnerId } from "@/lib/supabase/admin";
 import { verifyWebhookSecret } from "@/lib/webhook/verify";
 import { BlueBubblesProvider } from "@/lib/provider/bluebubbles";
 import { reconcileOutbound, recordInbound } from "@/lib/queue/reconcile";
+import { drainAiThreads } from "@/lib/ai/drain";
+import { after } from "next/server";
 
 export const dynamic = "force-dynamic";
+// after() runs the AI turn AFTER the 200 is sent, so the webhook acks instantly
+// while the reply generates in the background. Give it room for the pipeline.
+export const maxDuration = 60;
 
 // Health check / BlueBubbles "hello-world" pings sometimes use GET.
 export async function GET(request: Request) {
@@ -29,6 +34,7 @@ export async function POST(request: Request) {
   const { type, data } = payload;
   const admin = createAdminClient();
   const provider = new BlueBubblesProvider("", ""); // normalize() only
+  let triggerAi = false;
 
   try {
     switch (type) {
@@ -38,6 +44,7 @@ export async function POST(request: Request) {
           await reconcileOutbound(admin, msg);
         } else {
           await recordInbound(admin, msg, appOwnerId());
+          triggerAi = true; // a merchant replied — kick off the AI turn now
         }
         break;
       }
@@ -80,6 +87,16 @@ export async function POST(request: Request) {
   } catch (e) {
     // Always ack 200 so BlueBubbles doesn't retry-storm; log for diagnosis.
     console.error("[webhook] error", e);
+  }
+
+  // Generate the AI reply the instant a text arrives — runs after the 200 is
+  // sent, so the webhook stays fast. The per-minute cron is the backstop.
+  if (triggerAi) {
+    after(() =>
+      drainAiThreads(admin, 3).catch((err) =>
+        console.error("[webhook] ai drain", err),
+      ),
+    );
   }
 
   return NextResponse.json({ ok: true });
