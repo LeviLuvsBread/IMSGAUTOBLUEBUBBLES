@@ -145,18 +145,22 @@ export async function recordInbound(
     contactId = contact?.id ?? null;
   }
 
-  const { error } = await admin.from("messages").insert({
-    owner_id: ownerId,
-    contact_id: contactId,
-    chat_guid: msg.chatGuid,
-    direction: "in",
-    body: msg.text,
-    status: "received",
-    source: "reply",
-    bb_message_guid: msg.guid ?? null,
-    bb_date_created: msg.dateCreated ?? new Date().toISOString(),
-    associated_guid: msg.associatedMessageGuid ?? null,
-  });
+  const { data: insertedRow, error } = await admin
+    .from("messages")
+    .insert({
+      owner_id: ownerId,
+      contact_id: contactId,
+      chat_guid: msg.chatGuid,
+      direction: "in",
+      body: msg.text,
+      status: "received",
+      source: "reply",
+      bb_message_guid: msg.guid ?? null,
+      bb_date_created: msg.dateCreated ?? new Date().toISOString(),
+      associated_guid: msg.associatedMessageGuid ?? null,
+    })
+    .select("id")
+    .single();
   if (error) {
     // Unique violation on bb_message_guid → a concurrent insert won; treat as ok.
     if ((error as { code?: string }).code === "23505") return { inserted: false };
@@ -172,5 +176,56 @@ export async function recordInbound(
     .eq("status", "active")
     .eq("stop_on_reply", true);
 
+  // Flag the thread for the AI responder (the per-minute AI cron picks it up).
+  await flagNeedsReply(admin, ownerId, msg.chatGuid, contactId, insertedRow?.id ?? null);
+
   return { inserted: true };
+}
+
+// Mark a thread as needing an AI reply. Skips threads the human already owns
+// (escalated / handed off / closed) or that opted out — those don't re-engage;
+// we only refresh the last inbound pointer there. Preserves turns/qualification.
+async function flagNeedsReply(
+  admin: SupabaseClient,
+  ownerId: string,
+  chatGuid: string,
+  contactId: string | null,
+  inboundId: string | null,
+): Promise<void> {
+  const { data: existing } = await admin
+    .from("conversation_state")
+    .select("status, lifecycle_stage")
+    .eq("owner_id", ownerId)
+    .eq("chat_guid", chatGuid)
+    .maybeSingle();
+
+  if (!existing) {
+    await admin.from("conversation_state").insert({
+      owner_id: ownerId,
+      chat_guid: chatGuid,
+      contact_id: contactId,
+      status: "needs_reply",
+      last_inbound_message_id: inboundId,
+    });
+    return;
+  }
+
+  const humanOwned =
+    existing.status === "opted_out" ||
+    existing.status === "escalated" ||
+    existing.lifecycle_stage === "handed_off" ||
+    existing.lifecycle_stage === "closed";
+
+  const patch: Record<string, unknown> = {
+    last_inbound_message_id: inboundId,
+    updated_at: new Date().toISOString(),
+  };
+  if (!humanOwned) patch.status = "needs_reply";
+  if (contactId) patch.contact_id = contactId;
+
+  await admin
+    .from("conversation_state")
+    .update(patch)
+    .eq("owner_id", ownerId)
+    .eq("chat_guid", chatGuid);
 }

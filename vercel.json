@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/pump",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/ai",
+      "schedule": "* * * * *"
     }
   ]
 }

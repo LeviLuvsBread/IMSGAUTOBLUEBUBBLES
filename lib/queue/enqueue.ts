@@ -5,10 +5,12 @@ export interface EnqueueInput {
   chatGuid: string;
   body: string;
   contactId?: string | null;
-  source?: string; // manual | bulk | scheduled | sequence | reply
+  source?: string; // manual | bulk | scheduled | sequence | reply | ai
   campaignId?: string | null;
   scheduledSendId?: string | null;
   availableAt?: string; // ISO; defaults to now
+  aiGenerated?: boolean; // produced by the AI pipeline
+  aiPendingApproval?: boolean; // held draft — claim_next_send won't send until approved
 }
 
 function toRow(input: EnqueueInput) {
@@ -24,6 +26,8 @@ function toRow(input: EnqueueInput) {
     scheduled_send_id: input.scheduledSendId ?? null,
     bb_temp_guid: crypto.randomUUID(),
     available_at: input.availableAt ?? new Date().toISOString(),
+    ai_generated: input.aiGenerated ?? false,
+    ai_pending_approval: input.aiPendingApproval ?? false,
   };
 }
 

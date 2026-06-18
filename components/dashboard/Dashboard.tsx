@@ -14,6 +14,7 @@ import {
   RotateCcw,
   ChevronRight,
   Info,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -22,6 +23,7 @@ import { AnimatedNumber } from "@/components/AnimatedNumber";
 
 type Reply = { id: string; chatGuid: string; body: string };
 type Failed = { id: string; chatGuid: string; body: string; error: string | null };
+type Handover = { chatGuid: string; name: string; summary: string | null };
 
 export type DashboardData = {
   sentToday: number;
@@ -33,6 +35,7 @@ export type DashboardData = {
   maxDelay: number;
   replies: Reply[];
   failedRows: Failed[];
+  handovers: Handover[];
 };
 
 const container: Variants = {
@@ -213,6 +216,7 @@ export function Dashboard({
   maxDelay,
   replies,
   failedRows,
+  handovers,
   requeue,
 }: DashboardData & { requeue: (formData: FormData) => void }) {
   return (
@@ -318,6 +322,41 @@ export function Dashboard({
           sub="See replies in real time"
         />
       </motion.div>
+
+      {/* Ready for handover */}
+      {handovers.length > 0 ? (
+        <motion.section
+          variants={item}
+          className="rounded-card border border-accent/25 bg-accent/[0.05] p-2"
+        >
+          <h2 className="flex items-center gap-1.5 px-3 py-2 text-subhead font-semibold text-accent">
+            <Sparkles className="h-4 w-4" /> Ready for handover
+          </h2>
+          <ul>
+            {handovers.map((h) => (
+              <li key={h.chatGuid}>
+                <Link
+                  href={`/inbox/${encodeURIComponent(h.chatGuid)}`}
+                  className="flex items-center gap-3 rounded-row px-3 py-2 transition-colors duration-fast ease-ios hover:bg-fill-tertiary"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-caption font-semibold text-accent">
+                    {initials(h.name || h.chatGuid)}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-subhead font-medium">
+                      {h.name || h.chatGuid}
+                    </span>
+                    <span className="block truncate text-caption text-label-secondary">
+                      {h.summary || "Ready for you to take over."}
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-label-tertiary" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </motion.section>
+      ) : null}
 
       {/* Recent replies */}
       <motion.section variants={item} className={cn(cardBase, "p-2")}>

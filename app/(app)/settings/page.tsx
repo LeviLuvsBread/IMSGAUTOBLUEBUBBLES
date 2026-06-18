@@ -126,6 +126,40 @@ function ToggleRow({
   );
 }
 
+function TextAreaRow({
+  label,
+  name,
+  defaultValue,
+  placeholder,
+  help,
+}: {
+  label: string;
+  name: string;
+  defaultValue?: string;
+  placeholder?: string;
+  help?: string;
+}) {
+  return (
+    <div className="px-4 py-3">
+      <label htmlFor={name} className="block text-body">
+        {label}
+      </label>
+      {help ? (
+        <span className="mt-0.5 block text-caption text-label-secondary">
+          {help}
+        </span>
+      ) : null}
+      <textarea
+        id={name}
+        name={name}
+        defaultValue={defaultValue}
+        placeholder={placeholder}
+        rows={4}
+        className="mt-2 w-full resize-y rounded-control bg-fill px-3 py-2 text-subhead outline-none transition-colors duration-fast ease-ios placeholder:text-label-secondary focus:bg-fill-secondary"
+      />
+    </div>
+  );
+}
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -231,6 +265,54 @@ export default async function SettingsPage() {
               name="paused"
               defaultChecked={s?.paused ?? false}
               help="Stops every outgoing message until you turn it back off."
+            />
+          </Group>
+        </Section>
+
+        <Section
+          title="AI Assistant"
+          footnote="Inbound replies are drafted through your stage pipeline. In approve mode every reply waits for you in the thread; turn on auto-send once you trust it."
+        >
+          <Group>
+            <ToggleRow
+              label="Enable AI responder"
+              name="ai_enabled"
+              defaultChecked={s?.ai_enabled ?? false}
+              help="Master switch. When on, incoming replies get an AI-drafted response."
+            />
+            <ToggleRow
+              label="Auto-send approved replies"
+              name="ai_autosend"
+              defaultChecked={s?.ai_autosend ?? false}
+              help="Off = hold every draft for your approval (recommended). On = send automatically under the throttle."
+            />
+            <FieldRow
+              label="Max AI replies / thread"
+              name="ai_max_turns"
+              help="After this many AI replies, the thread is handed to you."
+              defaultValue={s?.ai_max_turns ?? 12}
+            />
+          </Group>
+        </Section>
+
+        <Section
+          title="AI voice & knowledge"
+          footnote="Persona shapes how it talks; knowledge holds the facts + do-not-say rules. Both are injected into every stage. Leave blank to use sensible defaults while testing."
+        >
+          <Group>
+            <TextAreaRow
+              label="Persona"
+              name="ai_persona"
+              help="Who the AI is and how it should sound."
+              placeholder="e.g. You're Alex, a friendly funding specialist who texts like a real person — casual, warm, concise, never salesy."
+              defaultValue={s?.ai_persona ?? ""}
+            />
+            <TextAreaRow
+              label="Knowledge & rules"
+              name="ai_knowledge"
+              help="What you offer + what it must never say."
+              placeholder="e.g. We help businesses get working capital fast. Never quote rates, fees, or approval amounts. Never guarantee funding."
+              defaultValue={s?.ai_knowledge ?? ""}
             />
           </Group>
         </Section>

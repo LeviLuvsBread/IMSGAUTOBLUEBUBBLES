@@ -59,6 +59,8 @@ export interface Message {
   bb_date_created: string | null;
   bb_date_delivered: string | null;
   bb_date_read: string | null;
+  ai_generated: boolean;
+  ai_pending_approval: boolean;
   created_at: string;
   sent_at: string | null;
   updated_at: string;
@@ -104,6 +106,11 @@ export interface AppSettings {
   sends_today_date: string;
   bb_url: string | null;
   paused: boolean;
+  ai_enabled: boolean;
+  ai_autosend: boolean;
+  ai_max_turns: number;
+  ai_persona: string | null;
+  ai_knowledge: string | null;
   updated_at: string;
 }
 
@@ -112,4 +119,99 @@ export interface Segment {
   company?: string;
   contact_ids?: string[];
   all?: boolean;
+}
+
+// ---------- AI conversational agent (0002_ai.sql) ----------
+
+export type ConversationStatus =
+  | "active"
+  | "needs_reply"
+  | "generating"
+  | "escalated"
+  | "opted_out"
+  | "done";
+
+export type LifecycleStage =
+  | "new"
+  | "engaged"
+  | "warming"
+  | "interested"
+  | "ready_for_handover"
+  | "handed_off"
+  | "closed";
+
+export interface ConversationState {
+  owner_id: string;
+  chat_guid: string;
+  contact_id: string | null;
+  status: ConversationStatus;
+  lifecycle_stage: LifecycleStage;
+  ai_autopilot: boolean;
+  ai_turns: number;
+  last_inbound_message_id: string | null;
+  last_processed_inbound_id: string | null;
+  claimed_at: string | null;
+  qualification: Record<string, unknown>;
+  handover_summary: string | null;
+  ready_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AiStageKind = "classify" | "research" | "draft" | "judge" | "finalize";
+
+export interface AiStage {
+  id: string;
+  owner_id: string;
+  position: number;
+  name: string;
+  kind: AiStageKind;
+  model: string;
+  prompt: string;
+  enabled: boolean;
+  can_block: boolean;
+  created_at: string;
+}
+
+export type AiRunOutcome =
+  | "replied"
+  | "held"
+  | "escalated"
+  | "opted_out"
+  | "no_reply"
+  | "max_turns"
+  | "error";
+
+export interface AiRunStage {
+  name: string;
+  model: string;
+  verdict: string;
+  analysis: string;
+  draft?: string;
+  ms?: number;
+  tokens?: number;
+}
+
+export interface AiRun {
+  id: string;
+  owner_id: string;
+  chat_guid: string;
+  inbound_message_id: string | null;
+  outcome: AiRunOutcome;
+  final_reply: string | null;
+  stages: AiRunStage[];
+  created_at: string;
+}
+
+export type NotificationType = "handover" | "escalation" | "opt_out";
+
+export interface AppNotification {
+  id: string;
+  owner_id: string;
+  type: NotificationType;
+  chat_guid: string | null;
+  title: string;
+  body: string | null;
+  read_at: string | null;
+  created_at: string;
 }

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { createClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/cn";
+import { AiDraftCard } from "@/components/AiDraftCard";
 import type { Message, MessageStatus } from "@/lib/types";
 
 function byCreated(a: Message, b: Message) {
@@ -110,9 +111,10 @@ export function MessageThread({
 
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = [];
-    messages.forEach((m, i) => {
-      const prev = messages[i - 1];
-      const next = messages[i + 1];
+    const visible = messages.filter((m) => m.status !== "canceled");
+    visible.forEach((m, i) => {
+      const prev = visible[i - 1];
+      const next = visible[i + 1];
       const prevGap = prev
         ? new Date(m.created_at).getTime() - new Date(prev.created_at).getTime()
         : Infinity;
@@ -131,10 +133,16 @@ export function MessageThread({
     return out;
   }, [messages]);
 
-  // iMessage shows the receipt only under the final outgoing bubble.
+  // iMessage shows the receipt only under the final outgoing bubble — skipping
+  // canceled rows and held AI drafts (which aren't sent bubbles).
   const lastOutId = useMemo(() => {
-    const last = messages[messages.length - 1];
-    return last && last.direction === "out" ? last.id : null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.status === "canceled") continue;
+      if (m.ai_generated && m.ai_pending_approval) continue;
+      return m.direction === "out" ? m.id : null;
+    }
+    return null;
   }, [messages]);
 
   if (messages.length === 0) {
@@ -160,7 +168,11 @@ export function MessageThread({
         }
         const { m, firstInGroup, lastInGroup } = row;
         const out = m.direction === "out";
+        if (out && m.ai_generated && m.ai_pending_approval && m.status === "queued") {
+          return <AiDraftCard key={m.id} message={m} />;
+        }
         const failed = m.status === "failed";
+        const isAi = out && m.ai_generated;
         const showReceipt = out && (failed || m.id === lastOutId);
         return (
           <div
@@ -193,14 +205,21 @@ export function MessageThread({
               >
                 {m.body}
               </motion.div>
-              {showReceipt ? (
+              {showReceipt || isAi ? (
                 <span
                   className={cn(
-                    "mt-1 px-1 text-caption2",
+                    "mt-1 flex items-center gap-1 px-1 text-caption2",
                     failed ? "text-danger" : "text-label-secondary",
                   )}
                 >
-                  {failed ? "Not Delivered" : receiptLabel(m.status)}
+                  {isAi ? (
+                    <span className="font-semibold text-accent">AI</span>
+                  ) : null}
+                  {showReceipt
+                    ? failed
+                      ? "Not Delivered"
+                      : receiptLabel(m.status)
+                    : null}
                 </span>
               ) : null}
             </div>

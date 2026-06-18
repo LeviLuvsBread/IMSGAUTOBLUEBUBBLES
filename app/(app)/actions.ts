@@ -259,11 +259,86 @@ export async function saveSettings(formData: FormData) {
       timezone: String(formData.get("timezone") ?? "America/New_York"),
       bb_url: String(formData.get("bb_url") ?? "").trim() || null,
       paused: formData.get("paused") === "on",
+      ai_enabled: formData.get("ai_enabled") === "on",
+      ai_autosend: formData.get("ai_autosend") === "on",
+      ai_max_turns: num("ai_max_turns", 12),
+      ai_persona: String(formData.get("ai_persona") ?? "").trim() || null,
+      ai_knowledge: String(formData.get("ai_knowledge") ?? "").trim() || null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", true);
   revalidatePath("/settings");
   redirect("/settings");
+}
+
+// ---------------- AI responder: drafts + per-thread autopilot ----------------
+
+// Approve a held AI draft → release it to the pump and count the AI turn.
+export async function approveDraft(messageId: string) {
+  const { supabase } = await requireUser();
+  const { data: msg } = await supabase
+    .from("messages")
+    .select("chat_guid")
+    .eq("id", messageId)
+    .maybeSingle();
+  await supabase
+    .from("messages")
+    .update({
+      ai_pending_approval: false,
+      available_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", messageId)
+    .eq("ai_pending_approval", true);
+  if (msg?.chat_guid) {
+    const { data: cs } = await supabase
+      .from("conversation_state")
+      .select("ai_turns")
+      .eq("chat_guid", msg.chat_guid)
+      .maybeSingle();
+    await supabase
+      .from("conversation_state")
+      .update({
+        ai_turns: ((cs?.ai_turns as number) ?? 0) + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("chat_guid", msg.chat_guid);
+  }
+}
+
+// Edit a held AI draft's text before approving.
+export async function editDraft(messageId: string, body: string) {
+  const { supabase } = await requireUser();
+  const text = body.trim();
+  if (!text) return;
+  await supabase
+    .from("messages")
+    .update({ body: text, updated_at: new Date().toISOString() })
+    .eq("id", messageId)
+    .eq("ai_pending_approval", true);
+}
+
+// Discard a held AI draft (don't send it).
+export async function discardDraft(messageId: string) {
+  const { supabase } = await requireUser();
+  await supabase
+    .from("messages")
+    .update({
+      status: "canceled",
+      ai_pending_approval: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", messageId)
+    .eq("ai_pending_approval", true);
+}
+
+// Toggle the AI responder on/off for one thread.
+export async function setAiAutopilot(chatGuid: string, on: boolean) {
+  const { supabase } = await requireUser();
+  await supabase
+    .from("conversation_state")
+    .update({ ai_autopilot: on, updated_at: new Date().toISOString() })
+    .eq("chat_guid", chatGuid);
 }
 
 // ---------------- one-off send ----------------
