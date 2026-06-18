@@ -5,6 +5,7 @@ import { MessageThread } from "@/components/MessageThread";
 import { ThreadAiBar } from "@/components/ThreadAiBar";
 import { addressFromChatGuid } from "@/lib/chat";
 import { sendNow } from "../../actions";
+import { TEST_CHAT_GUID } from "@/lib/test-contact";
 import type { Message, ConversationState } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +35,7 @@ export default async function ThreadPage({
       .maybeSingle(),
   ]);
   const cs = (convo as ConversationState | null) ?? null;
+  const isTest = chatGuid === TEST_CHAT_GUID;
 
   return (
     <div className="flex h-[calc(100vh-9rem)] flex-col">
@@ -49,12 +51,13 @@ export default async function ThreadPage({
         </h1>
       </div>
 
-      {cs ? (
+      {cs || isTest ? (
         <ThreadAiBar
           chatGuid={chatGuid}
-          autopilot={cs.ai_autopilot}
-          lifecycleStage={cs.lifecycle_stage}
-          status={cs.status}
+          autopilot={cs?.ai_autopilot ?? true}
+          lifecycleStage={cs?.lifecycle_stage ?? "new"}
+          status={cs?.status ?? "active"}
+          isTest={isTest}
         />
       ) : null}
 

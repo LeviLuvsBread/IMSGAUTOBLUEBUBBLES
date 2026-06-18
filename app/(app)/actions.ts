@@ -7,6 +7,7 @@ import { enqueueMessage, enqueueBulk, type EnqueueInput } from "@/lib/queue/enqu
 import { resolveSegment } from "@/lib/segments";
 import { renderForContact, extractVariables } from "@/lib/templating";
 import { STARTER_TEMPLATES } from "@/lib/starter-templates";
+import { TEST_CHAT_GUID } from "@/lib/test-contact";
 import { toE164, chatGuidForPhone } from "@/lib/chat";
 import { runPump } from "@/lib/queue/pump";
 import type { Contact, Segment } from "@/lib/types";
@@ -339,6 +340,20 @@ export async function setAiAutopilot(chatGuid: string, on: boolean) {
     .from("conversation_state")
     .update({ ai_autopilot: on, updated_at: new Date().toISOString() })
     .eq("chat_guid", chatGuid);
+}
+
+// TEST ONLY: wipe the test thread (messages + AI state + runs + notifications)
+// so the AI treats the next inbound as a brand-new conversation. Hard-scoped to
+// the test contact — it can never touch a real lead.
+export async function resetTestConversation(chatGuid: string) {
+  const { supabase } = await requireUser();
+  if (chatGuid !== TEST_CHAT_GUID) return; // safety: test contact only
+  await supabase.from("messages").delete().eq("chat_guid", chatGuid);
+  await supabase.from("ai_runs").delete().eq("chat_guid", chatGuid);
+  await supabase.from("notifications").delete().eq("chat_guid", chatGuid);
+  await supabase.from("conversation_state").delete().eq("chat_guid", chatGuid);
+  revalidatePath("/inbox");
+  revalidatePath("/");
 }
 
 // ---------------- one-off send ----------------
