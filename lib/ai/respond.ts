@@ -10,7 +10,7 @@ import type {
   Message,
 } from "@/lib/types";
 import { enqueueMessage } from "@/lib/queue/enqueue";
-import { isOptOut } from "./guardrails";
+import { isOptOut, needsHuman } from "./guardrails";
 import { runPipeline, type ConvoTurn, type PipelineContext } from "./pipeline";
 import { evaluateLifecycle } from "./lifecycle";
 
@@ -172,6 +172,25 @@ export async function runConversationTurn(
     );
     await writeRun(admin, ownerId, chatGuid, inboundId, "opted_out", null, []);
     return { outcome: "opted_out" };
+  }
+
+  // Deterministic "needs human" pre-gate: attorney / lawsuit / dispute / cease →
+  // hand to a person, never let the AI reply (from the handoff spec).
+  if (needsHuman(latestInboundText)) {
+    await patchState(admin, ownerId, chatGuid, {
+      status: "escalated",
+      last_processed_inbound_id: inboundId,
+    });
+    await notify(
+      admin,
+      ownerId,
+      "escalation",
+      chatGuid,
+      `${contact?.company || contact?.name || "A conversation"} needs you`,
+      "The merchant used legal/dispute language. Handed to you — no AI reply was sent.",
+    );
+    await writeRun(admin, ownerId, chatGuid, inboundId, "escalated", null, []);
+    return { outcome: "escalated" };
   }
 
   // Max turns → force handover, don't generate.

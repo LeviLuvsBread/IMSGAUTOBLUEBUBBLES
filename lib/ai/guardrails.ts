@@ -18,3 +18,13 @@ const RISKY_RE =
 export function looksRisky(text: string): boolean {
   return RISKY_RE.test(text ?? "");
 }
+
+// "Needs human" hard rule (from the handoff spec): legal / dispute language must
+// go straight to a person — the AI never replies. Belt to the classifier's
+// suspenders.
+const NEEDS_HUMAN_RE =
+  /\b(attorney|lawyer|lawsuit|\bsue\b|suing|dispute|cease|cease and desist|legal action|litigat)\w*/i;
+
+export function needsHuman(text: string): boolean {
+  return NEEDS_HUMAN_RE.test(text ?? "");
+}
