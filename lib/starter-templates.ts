@@ -1,137 +1,136 @@
-// Outreach templates for Blackbridge Management, voiced as Gabriel — MCA /
-// business-funding focused, SMS-length, conversational, compliance-minded (no
-// rate/term/approval promises, easy opt-out tone). Seeded into the Templates
-// page and reloadable via "Load starter pack". All fully editable.
+// Outreach templates for Blackbridge Management, voiced as Gabriel — written to
+// read like a real person texting, NOT a marketing blast: short, casual, no
+// em-dashes, no salesy clichés, one easy question. Seeded into Templates and
+// reloadable via "Load starter pack". All editable.
 //
-// Merge fields (see lib/templating.ts): {{first_name}}, {{name}}, {{company}},
-// {{email}}, {{phone}} — these resolve to the RECIPIENT's details. The sender
-// identity (Gabriel / Blackbridge Management) is baked in.
+// Merge fields resolve to the RECIPIENT: {{first_name}}, {{name}}, {{company}},
+// {{email}}, {{phone}}. Sender identity (Gabriel / Blackbridge) is baked in.
 export type StarterTemplate = { name: string; body: string };
 
 export const STARTER_TEMPLATES: StarterTemplate[] = [
   // ── Warm-up / first touch ────────────────────────────────────────────────
   {
     name: "Warm-up · First touch",
-    body: "Hi {{first_name}}, it's Gabriel over at Blackbridge Management — we help business owners get quick, flexible working capital with minimal paperwork. Worth a 2-min chat to see what we could line up for {{company}}?",
+    body: "Hey {{first_name}}, it's Gabriel with Blackbridge. We help business owners get working capital fast, not a ton of paperwork. You guys looking for any funding right now?",
   },
   {
     name: "Warm-up · Casual opener",
-    body: "Hey {{first_name}}! Gabriel here with Blackbridge Management — is {{company}} looking for any working capital right now, or are you all set?",
+    body: "Hey {{first_name}}, Gabriel here with Blackbridge. You currently looking for any working capital, or all good for now?",
   },
   {
     name: "Warm-up · Question hook",
-    body: "Hey {{first_name}}, it's Gabriel at Blackbridge — if you could get {{company}} a chunk of working capital this week with almost no paperwork, would that be useful right now?",
+    body: "Hey {{first_name}}, it's Gabriel at Blackbridge. If you could get some working capital this week without much hassle, would that help right now?",
   },
   {
     name: "Warm-up · Value (speed)",
-    body: "Hi {{first_name}}, Gabriel with Blackbridge Management — best part of what we do: most decisions come back same day and funding can land in 24–48 hrs. Want me to see what {{company}} could qualify for?",
+    body: "Hey {{first_name}}, Gabriel with Blackbridge. We can usually get a decision same day and funding in a day or two. Want me to see what you'd qualify for?",
   },
   {
     name: "Warm-up · Value (flexible use)",
-    body: "Hey {{first_name}}, it's Gabriel at Blackbridge — payroll, inventory, equipment, or just a cushion: the funds can be used however {{company}} needs them. Worth a quick look?",
+    body: "Hey {{first_name}}, it's Gabriel at Blackbridge. Funds can go toward payroll, inventory, equipment, whatever you need. Worth a quick look?",
   },
 
   // ── Re-warm / re-engage cold leads ───────────────────────────────────────
   {
     name: "Re-warm · Reconnect",
-    body: "Hi {{first_name}}, it's Gabriel with Blackbridge Management following back up. We talked a while back about funding for {{company}} — timing is everything, so is now any better to revisit it?",
+    body: "Hey {{first_name}}, it's Gabriel from Blackbridge. We talked a while back about funding. Is now a better time to take another look?",
   },
   {
     name: "Re-warm · Check-in",
-    body: "Hey {{first_name}}, Gabriel here at Blackbridge — circling back, our programs have changed a lot since we last spoke. Still open to exploring options for {{company}}?",
+    body: "Hey {{first_name}}, Gabriel from Blackbridge. Our programs have changed a lot since we last talked. Still want to explore options?",
   },
   {
     name: "Re-warm · Win-back (declined before)",
-    body: "Hi {{first_name}}, it's Gabriel at Blackbridge Management — we've added new lenders since we last talked, so {{company}} may qualify now even if it didn't before. Worth a 2-min recheck?",
+    body: "Hey {{first_name}}, it's Gabriel at Blackbridge. We added some new lenders since we last spoke, so you might qualify now even if you didn't before. Worth a quick recheck?",
   },
   {
     name: "Re-warm · Long gap",
-    body: "Hey {{first_name}}, Gabriel from Blackbridge here — been a minute! Hope {{company}} is doing great. If working capital is on your radar this quarter, I'd love to help — just say the word.",
+    body: "Hey {{first_name}}, Gabriel from Blackbridge. Been a while! You still looking into funding for the business, or all set for now?",
   },
 
   // ── Follow-ups (within an ongoing thread) ────────────────────────────────
   {
     name: "Follow-up · Bump 1",
-    body: "Hi {{first_name}}, just floating this back to the top of your inbox. Happy to send a couple quick details on funding for {{company}} whenever you've got a sec.",
+    body: "Hey {{first_name}}, just bumping this back up. Want me to send over a couple quick details on funding?",
   },
   {
     name: "Follow-up · Bump 2",
-    body: "Hey {{first_name}}, did you get a chance to think it over? No pressure — just let me know if now's a good time to look at options for {{company}}.",
+    body: "Hey {{first_name}}, did you get a chance to think it over? No rush, just lmk if now's a good time.",
   },
   {
     name: "Follow-up · Final (break-up)",
-    body: "Hey {{first_name}}, I'll stop reaching out after this so I'm not a bother. If funding for {{company}} is ever useful down the road, just reply and I'm here — Gabriel at Blackbridge. 👍",
+    body: "Hey {{first_name}}, I'll leave it here so I'm not bugging you. If funding ever comes up down the road just text me. Gabriel",
   },
 
-  // ── Qualification ────────────────────────────────────────────────────────
+  // ── Qualification (mid-conversation) ─────────────────────────────────────
   {
     name: "Qualify · Quick qualify",
-    body: "{{first_name}}, so I can point you to the right option — roughly what does {{company}} do in monthly revenue, and how long have you been in business?",
+    body: "Got it. Roughly how much do you do in monthly revenue, and how long have you been in business?",
   },
   {
     name: "Qualify · Amount needed",
-    body: "Got it {{first_name}} — ballpark, how much working capital would actually move the needle for {{company}} right now?",
+    body: "Got it. Ballpark, how much were you looking to get?",
   },
   {
     name: "Qualify · Timing",
-    body: "Makes sense {{first_name}}. Is this something you'd want to move on this week, or more just exploring for {{company}} down the line?",
+    body: "Makes sense. You trying to move on this soon, or more just feeling it out?",
   },
 
   // ── Objection handling ───────────────────────────────────────────────────
   {
     name: "Objection · Send me info",
-    body: "Absolutely {{first_name}} — fastest way is a quick 5-min call so I only send what's actually relevant to {{company}}. Mornings or afternoons better for you?",
+    body: "Yeah for sure. Easiest is a quick 5 min call so I only send what actually fits. Mornings or afternoons better for you?",
   },
   {
     name: "Objection · What are the rates?",
-    body: "Good question {{first_name}} — it really depends on a few things specific to {{company}}, so I don't want to quote you something off. A quick call gets you real numbers. Got 5 min today?",
+    body: "Good question. It really depends on a few things specific to your business, so I don't want to throw out a wrong number. Quick call and I'll get you real ones. Got 5 min today?",
   },
   {
     name: "Objection · Too busy",
-    body: "Totally get it {{first_name}} — that's exactly why we keep it simple at Blackbridge. Want me to text you the 2–3 things we'd need so you can glance when {{company}} slows down?",
+    body: "Totally get it. Want me to just text you the 2-3 things we'd need so you can glance at it when things slow down?",
   },
   {
     name: "Objection · Not interested",
-    body: "Totally understand, {{first_name}} — appreciate you letting me know. If anything changes for {{company}}, you've got my number. — Gabriel, Blackbridge",
+    body: "All good, appreciate you letting me know. If anything changes down the road you've got my number. Gabriel",
   },
   {
     name: "Objection · Already have funding",
-    body: "Love that {{first_name}}. A lot of owners still like having a backup option ready for {{company}} so they're never stuck — that's where Blackbridge comes in. Want me to keep one on file for you, no obligation?",
+    body: "Nice. A lot of owners still like having a backup lined up so they're never stuck. Want me to keep one on file just in case? No pressure.",
   },
 
   // ── Booking the call ─────────────────────────────────────────────────────
   {
     name: "Booking · Offer times",
-    body: "Great {{first_name}}! What works better for a quick call — later today or sometime tomorrow? I'll keep it to 5–10 minutes.",
+    body: "Cool. What's better for a quick call, later today or tomorrow? Won't take more than 5-10 min.",
   },
   {
     name: "Booking · Confirm",
-    body: "Perfect, {{first_name}} — you're set. I'll call you then. If anything comes up, just text me right here. Talk soon! — Gabriel",
+    body: "Perfect, you're set. I'll call you then. Anything comes up just text me here.",
   },
   {
     name: "Booking · Reschedule",
-    body: "No worries {{first_name}} — life happens. When's a better time for you and {{company}} this week?",
+    body: "No worries, stuff happens. When's better for you this week?",
   },
 
   // ── Re-engage / renewal / referral / goodwill ────────────────────────────
   {
     name: "Re-engage · Seasonal push",
-    body: "Hi {{first_name}}, Gabriel at Blackbridge — a lot of owners are getting set up with capital before the busy season hits. Want me to check what's available for {{company}} right now?",
+    body: "Hey {{first_name}}, Gabriel from Blackbridge. A lot of owners are getting set up with capital before things get busy. Want me to check what's available for you?",
   },
   {
     name: "Renewal · Existing client",
-    body: "Hey {{first_name}}, it's Gabriel with Blackbridge Management — you've been paying down nicely, and that usually opens the door to renew or increase funding for {{company}}. Want me to take a look?",
+    body: "Hey {{first_name}}, it's Gabriel at Blackbridge. You've been paying down nicely, which usually means you can renew or bump up the funding. Want me to take a look?",
   },
   {
     name: "Referral · Ask",
-    body: "{{first_name}}, glad we could help {{company}}! Quick favor — know any other owners who could use fast funding? Happy to take great care of them too. — Gabriel, Blackbridge",
+    body: "Hey {{first_name}}, glad we could help you out! Quick favor, know any other owners who could use quick funding? Happy to take good care of them too.",
   },
   {
     name: "Goodwill · Holiday",
-    body: "Happy holidays from all of us at Blackbridge Management, {{first_name}}! Wishing you and the {{company}} team a strong finish to the year. 🎉 Here whenever you need us. — Gabriel",
+    body: "Happy holidays {{first_name}}! Hope you and the team have a great one. Here whenever you need us. Gabriel",
   },
   {
     name: "Thanks · After call",
-    body: "Thanks for the time today, {{first_name}}! Great chatting. I'll follow up with the next steps for {{company}} shortly — reach out anytime. — Gabriel, Blackbridge Management",
+    body: "Thanks for the time today {{first_name}}, good talking. I'll get you the next steps shortly. Text me anytime.",
   },
 ];
