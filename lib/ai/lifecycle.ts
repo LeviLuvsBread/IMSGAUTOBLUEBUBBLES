@@ -24,15 +24,23 @@ export interface LifecycleResult {
   handover_summary?: string;
 }
 
-const SYSTEM = `You track where a business-funding outreach conversation stands and decide when it's ready to hand to a human closer.
+const SYSTEM = `You track where a business-funding (MCA) outreach conversation stands and decide ONLY when it's ready to hand to the human closer.
 Stages, in order: new → engaged → warming → interested → ready_for_handover → handed_off → closed.
-The AI keeps engaging and qualifying on its own. Set ready_for_handover = true ONLY when the lead either (a) explicitly wants to book/schedule a meeting or call, OR (b) confirms they have signed the application or uploaded their documents / bank statements via the link. Simply answering qualifying questions (amount, revenue, business type, time in business) is NOT enough — in that case set ready_for_handover = false and keep driving them toward the intake link or a meeting. Advance the stage (engaged/warming/interested) to reflect progress, but never hand off early.
+The AI keeps engaging and qualifying on its own. Set ready_for_handover = true ONLY when the lead:
+  (a) says they prefer or want to set up a call or meeting, OR
+  (b) says they have signed / submitted / completed the application form (or uploaded their documents) via the link.
+Just answering qualifying questions (amount, revenue, business type, time in business) is NOT enough — set ready_for_handover = false and keep driving them toward the form or a call. Advance the stage (engaged/warming/interested) to reflect progress, never hand off early.
+When ready_for_handover is true, write handover_summary as a tight brief for the human, including:
+  - who they are + business type
+  - the key facts gathered: amount wanted, monthly revenue, time in business, purpose (use whatever is known)
+  - the handoff reason, stated plainly: "Signed the application" or "Prefers a call"
+Put any new facts in qualification_updates.
 Respond with ONLY a JSON object:
 {
   "stage": one of new|engaged|warming|interested|ready_for_handover|handed_off|closed,
   "qualification_updates": { ...any merchant facts learned... },
   "ready_for_handover": boolean,
-  "handover_summary": "1-2 sentence brief for the human: who they are, why they're ready, key facts"
+  "handover_summary": "the brief described above when ready; otherwise empty"
 }`;
 
 export async function evaluateLifecycle(

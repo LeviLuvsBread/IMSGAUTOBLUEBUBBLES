@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { MessageThread } from "@/components/MessageThread";
 import { ThreadAiBar } from "@/components/ThreadAiBar";
@@ -59,6 +59,33 @@ export default async function ThreadPage({
           status={cs?.status ?? "active"}
           isTest={isTest}
         />
+      ) : null}
+
+      {cs &&
+      (cs.lifecycle_stage === "ready_for_handover" || cs.status === "escalated") ? (
+        <div className="mb-2 rounded-card border border-warning/30 bg-warning/[0.06] p-3">
+          <p className="flex items-center gap-1.5 text-caption2 font-semibold uppercase tracking-wide text-warning">
+            <Sparkles className="h-3 w-3" />
+            {cs.status === "escalated" ? "Needs you" : "Ready for handover"}
+          </p>
+          {cs.handover_summary ? (
+            <p className="mt-1 text-subhead text-label">{cs.handover_summary}</p>
+          ) : null}
+          {cs.qualification && Object.keys(cs.qualification).length ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {Object.entries(cs.qualification).map(([k, v]) =>
+                v && typeof v !== "object" ? (
+                  <span
+                    key={k}
+                    className="rounded-full bg-surface px-2 py-0.5 text-caption2 text-label-secondary ring-1 ring-black/[0.06] dark:ring-white/[0.08]"
+                  >
+                    {k.replace(/_/g, " ")}: {String(v)}
+                  </span>
+                ) : null,
+              )}
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="flex-1 overflow-y-auto rounded-card bg-surface px-3 ring-1 ring-black/[0.05] dark:ring-white/[0.08]">
