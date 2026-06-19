@@ -356,6 +356,36 @@ export async function resetTestConversation(chatGuid: string) {
   revalidatePath("/");
 }
 
+// Bulk one-off send: render the message per contact (merge fields) and queue it
+// for everyone selected. Skips opted-out / missing. Returns how many queued.
+export async function sendBulkNow(
+  contactIds: string[],
+  body: string,
+): Promise<{ queued: number; skipped: number }> {
+  const { supabase, userId } = await requireUser();
+  const text = (body ?? "").trim();
+  const ids = Array.isArray(contactIds) ? [...new Set(contactIds.filter(Boolean))] : [];
+  if (!text || ids.length === 0) return { queued: 0, skipped: ids.length };
+
+  const { data } = await supabase
+    .from("contacts")
+    .select("*")
+    .in("id", ids)
+    .eq("opted_out", false);
+  const contacts = (data ?? []) as Contact[];
+
+  const inputs: EnqueueInput[] = contacts.map((c) => ({
+    ownerId: userId,
+    chatGuid: c.chat_guid ?? chatGuidForPhone(c.phone),
+    contactId: c.id,
+    body: renderForContact(text, c),
+    source: "bulk",
+  }));
+  const queued = inputs.length ? await enqueueBulk(supabase, inputs) : 0;
+  revalidatePath("/");
+  return { queued, skipped: ids.length - contacts.length };
+}
+
 // ---------------- one-off send ----------------
 export async function sendNow(formData: FormData) {
   const { supabase, userId } = await requireUser();

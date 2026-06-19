@@ -193,8 +193,9 @@ export async function runConversationTurn(
     return { outcome: "escalated" };
   }
 
-  // Max turns → force handover, don't generate.
-  if (cs.ai_turns >= s.ai_max_turns) {
+  // Optional turn cap (0 = no limit; the default). When set and hit, force a
+  // handover. Otherwise the AI keeps engaging until it's genuinely ready.
+  if (s.ai_max_turns > 0 && cs.ai_turns >= s.ai_max_turns) {
     await patchState(admin, ownerId, chatGuid, {
       status: "active",
       lifecycle_stage: "ready_for_handover",

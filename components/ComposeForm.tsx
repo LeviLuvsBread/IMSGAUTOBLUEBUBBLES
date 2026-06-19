@@ -1,30 +1,94 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { sendNow } from "@/app/(app)/actions";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Search, Check, Users, Loader2, Send, Clock } from "lucide-react";
+import { sendBulkNow } from "@/app/(app)/actions";
 import { renderForContact } from "@/lib/templating";
+import { cn } from "@/lib/cn";
 import type { Contact, Template } from "@/lib/types";
 
 export function ComposeForm({
   contacts,
   templates,
+  minDelay,
+  jitter,
+  dailyCap,
+  sentToday,
 }: {
   contacts: Contact[];
   templates: Template[];
+  minDelay: number;
+  jitter: number;
+  dailyCap: number;
+  sentToday: number;
 }) {
-  const [contactId, setContactId] = useState("");
+  const router = useRouter();
+  const [search, setSearch] = useState("");
+  const [tag, setTag] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [templateId, setTemplateId] = useState("");
   const [body, setBody] = useState("");
-
-  const contact = useMemo(
-    () => contacts.find((c) => c.id === contactId),
-    [contacts, contactId],
+  const [pending, start] = useTransition();
+  const [result, setResult] = useState<{ queued: number; skipped: number } | null>(
+    null,
   );
 
+  const tags = useMemo(() => {
+    const set = new Set<string>();
+    contacts.forEach((c) => (c.tags ?? []).forEach((t) => set.add(t)));
+    return [...set].sort();
+  }, [contacts]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return contacts.filter((c) => {
+      if (tag && !(c.tags ?? []).includes(tag)) return false;
+      if (!q) return true;
+      return (
+        (c.name ?? "").toLowerCase().includes(q) ||
+        (c.phone ?? "").toLowerCase().includes(q) ||
+        (c.company ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [contacts, search, tag]);
+
+  const count = selected.size;
+  const allFilteredSelected =
+    filtered.length > 0 && filtered.every((c) => selected.has(c.id));
+
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const selectAllFiltered = () =>
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (allFilteredSelected) filtered.forEach((c) => n.delete(c.id));
+      else filtered.forEach((c) => n.add(c.id));
+      return n;
+    });
+  const clearAll = () => setSelected(new Set());
+
+  const firstSelected = useMemo(
+    () => contacts.find((c) => selected.has(c.id)),
+    [contacts, selected],
+  );
   const preview = useMemo(
-    () => (contact ? renderForContact(body, contact) : body),
-    [body, contact],
+    () => (firstSelected ? renderForContact(body, firstSelected) : body),
+    [body, firstSelected],
   );
+
+  // Rough send-time estimate from the throttle (first goes ~now).
+  const avgGap = minDelay + jitter / 2;
+  const estSec = Math.max(0, count - 1) * avgGap;
+  const estLabel =
+    estSec < 1 ? "instant" : estSec < 90 ? `~${Math.round(estSec)}s` : `~${Math.round(estSec / 60)} min`;
+  const remainingCap = Math.max(0, dailyCap - sentToday);
+  const overCap = count > remainingCap;
 
   function applyTemplate(id: string) {
     setTemplateId(id);
@@ -32,81 +96,215 @@ export function ComposeForm({
     if (t) setBody(t.body);
   }
 
+  const send = () => {
+    if (count === 0 || !body.trim() || pending) return;
+    start(async () => {
+      const res = await sendBulkNow([...selected], body);
+      setResult(res);
+      setSelected(new Set());
+      router.refresh();
+      setTimeout(() => setResult(null), 6000);
+    });
+  };
+
+  const card =
+    "rounded-card bg-surface p-4 shadow-card ring-1 ring-black/[0.05] dark:ring-white/[0.08]";
+  const inputCls =
+    "w-full rounded-control bg-fill px-3 py-2 text-subhead outline-none transition-colors duration-fast ease-ios placeholder:text-label-secondary focus:bg-fill-secondary";
+
   return (
-    <form action={sendNow} className="space-y-4">
-      <input type="hidden" name="contact_id" value={contactId} />
-      {/* The rendered text is what actually gets sent. */}
-      <input type="hidden" name="body" value={preview} />
-
-      <div>
-        <label className="mb-1 block text-sm font-medium">Recipient</label>
-        <select
-          value={contactId}
-          onChange={(e) => setContactId(e.target.value)}
-          required
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-800"
-        >
-          <option value="">Select a contact…</option>
-          {contacts.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name} ({c.phone})
-              {c.company ? ` · ${c.company}` : ""}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {templates.length > 0 ? (
-        <div>
-          <label className="mb-1 block text-sm font-medium">
-            Template (optional)
-          </label>
-          <select
-            value={templateId}
-            onChange={(e) => applyTemplate(e.target.value)}
-            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-800"
+    <div className="grid gap-4 md:grid-cols-2">
+      {/* ── Recipients picker ── */}
+      <div className={card}>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="flex items-center gap-1.5 text-subhead font-semibold">
+            <Users className="h-4 w-4 text-label-secondary" /> Recipients
+          </h2>
+          <span
+            className={cn(
+              "rounded-full px-2 py-0.5 text-caption2 font-semibold tabular-nums",
+              count > 0
+                ? "bg-accent/10 text-accent"
+                : "bg-fill-secondary text-label-secondary",
+            )}
           >
-            <option value="">None</option>
-            {templates.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : null}
-
-      <div>
-        <label className="mb-1 block text-sm font-medium">
-          Message{" "}
-          <span className="text-xs font-normal text-neutral-400">
-            (use {"{{name}}"}, {"{{first_name}}"}, {"{{company}}"})
+            {count} selected
           </span>
-        </label>
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          rows={5}
-          required
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-800"
-        />
+        </div>
+
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-label-secondary" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name, phone, company"
+              className={cn(inputCls, "pl-8")}
+            />
+          </div>
+          {tags.length > 0 ? (
+            <select
+              value={tag}
+              onChange={(e) => setTag(e.target.value)}
+              className="shrink-0 rounded-control bg-fill px-2 py-2 text-subhead outline-none focus:bg-fill-secondary"
+            >
+              <option value="">All tags</option>
+              {tags.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          ) : null}
+        </div>
+
+        <div className="mt-2 flex items-center justify-between text-footnote">
+          <button
+            type="button"
+            onClick={selectAllFiltered}
+            className="text-accent hover:underline"
+          >
+            {allFilteredSelected ? "Deselect" : "Select all"} ({filtered.length})
+          </button>
+          {count > 0 ? (
+            <button
+              type="button"
+              onClick={clearAll}
+              className="text-label-secondary hover:text-label"
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
+
+        <ul className="mt-2 max-h-[46vh] divide-y divide-black/[0.06] overflow-y-auto rounded-control dark:divide-white/[0.08]">
+          {filtered.length === 0 ? (
+            <li className="py-8 text-center text-caption text-label-secondary">
+              No contacts match.
+            </li>
+          ) : (
+            filtered.map((c) => {
+              const on = selected.has(c.id);
+              return (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    onClick={() => toggle(c.id)}
+                    className="flex w-full items-center gap-3 px-1 py-2 text-left transition-colors hover:bg-fill-tertiary"
+                  >
+                    <span
+                      className={cn(
+                        "flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] ring-1 transition-colors",
+                        on
+                          ? "bg-accent text-white ring-accent"
+                          : "bg-transparent ring-hairline",
+                      )}
+                    >
+                      {on ? <Check className="h-3.5 w-3.5" /> : null}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-subhead">{c.name}</span>
+                      <span className="block truncate text-caption text-label-secondary">
+                        {c.phone}
+                        {c.company ? ` · ${c.company}` : ""}
+                        {c.tags?.length ? ` · ${c.tags.join(", ")}` : ""}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })
+          )}
+        </ul>
       </div>
 
-      {contact ? (
-        <div className="rounded-lg bg-neutral-100 p-3 text-sm dark:bg-neutral-800">
-          <div className="mb-1 text-xs font-medium text-neutral-500">
-            Preview to {contact.name}
-          </div>
-          <div className="whitespace-pre-wrap">{preview || "—"}</div>
-        </div>
-      ) : null}
+      {/* ── Message ── */}
+      <div className="space-y-4">
+        <div className={card}>
+          {templates.length > 0 ? (
+            <div className="mb-3">
+              <label className="mb-1 block text-footnote font-medium text-label-secondary">
+                Template
+              </label>
+              <select
+                value={templateId}
+                onChange={(e) => applyTemplate(e.target.value)}
+                className="w-full rounded-control bg-fill px-3 py-2 text-subhead outline-none focus:bg-fill-secondary"
+              >
+                <option value="">None</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
 
-      <button
-        type="submit"
-        className="rounded-lg bg-imsg-blue px-4 py-2 text-sm font-medium text-white"
-      >
-        Send now
-      </button>
-    </form>
+          <label className="mb-1 block text-footnote font-medium text-label-secondary">
+            Message{" "}
+            <span className="font-normal">
+              — merge: {"{{first_name}}"} {"{{company}}"}
+            </span>
+          </label>
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            rows={6}
+            placeholder="Type your message…"
+            className={cn(inputCls, "resize-y")}
+          />
+
+          {firstSelected ? (
+            <div className="mt-3 rounded-control bg-fill p-3">
+              <div className="mb-1 text-caption2 font-medium uppercase tracking-wide text-label-secondary">
+                Preview → {firstSelected.name}
+              </div>
+              <div className="whitespace-pre-wrap text-callout">
+                {preview || "—"}
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className={card}>
+          {count > 1 && avgGap > 0 ? (
+            <p className="mb-2 flex items-center gap-1.5 text-caption text-label-secondary">
+              <Clock className="h-3.5 w-3.5" /> {estLabel} to send all {count}{" "}
+              (drips under your throttle)
+            </p>
+          ) : null}
+          {overCap ? (
+            <p className="mb-2 text-caption text-warning">
+              Heads up: only {remainingCap} left in today's cap of {dailyCap} —
+              the rest will go out tomorrow.
+            </p>
+          ) : null}
+          {result ? (
+            <p className="mb-2 text-caption text-success">
+              Queued {result.queued} message{result.queued === 1 ? "" : "s"}
+              {result.skipped > 0 ? ` · ${result.skipped} skipped (opted out)` : ""}
+              .
+            </p>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={send}
+            disabled={count === 0 || !body.trim() || pending}
+            className="press inline-flex w-full items-center justify-center gap-2 rounded-control bg-accent px-6 py-3 text-body font-semibold text-white disabled:opacity-40"
+          >
+            {pending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            {count === 0
+              ? "Select recipients"
+              : `Send to ${count} contact${count === 1 ? "" : "s"}`}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -289,8 +289,8 @@ export default async function SettingsPage() {
             <FieldRow
               label="Max AI replies / thread"
               name="ai_max_turns"
-              help="After this many AI replies, the thread is handed to you."
-              defaultValue={s?.ai_max_turns ?? 12}
+              help="0 = no limit (only stops at handover or if it flags a time-waster)."
+              defaultValue={s?.ai_max_turns ?? 0}
             />
           </Group>
         </Section>
