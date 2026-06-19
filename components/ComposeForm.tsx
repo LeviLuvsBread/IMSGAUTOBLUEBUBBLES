@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Check, Users, Loader2, Send, Clock } from "lucide-react";
 import { sendBulkNow } from "@/app/(app)/actions";
 import { renderForContact } from "@/lib/templating";
+import { MergeFields } from "@/components/MergeFields";
 import { cn } from "@/lib/cn";
 import type { Contact, Template } from "@/lib/types";
 
@@ -89,6 +90,23 @@ export function ComposeForm({
     estSec < 1 ? "instant" : estSec < 90 ? `~${Math.round(estSec)}s` : `~${Math.round(estSec / 60)} min`;
   const remainingCap = Math.max(0, dailyCap - sentToday);
   const overCap = count > remainingCap;
+
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const insert = (v: string) => {
+    const ta = taRef.current;
+    if (!ta) {
+      setBody((b) => b + v);
+      return;
+    }
+    const s = ta.selectionStart ?? body.length;
+    const e = ta.selectionEnd ?? body.length;
+    setBody(body.slice(0, s) + v + body.slice(e));
+    requestAnimationFrame(() => {
+      ta.focus();
+      const p = s + v.length;
+      ta.setSelectionRange(p, p);
+    });
+  };
 
   function applyTemplate(id: string) {
     setTemplateId(id);
@@ -242,18 +260,23 @@ export function ComposeForm({
           ) : null}
 
           <label className="mb-1 block text-footnote font-medium text-label-secondary">
-            Message{" "}
-            <span className="font-normal">
-              — merge: {"{{first_name}}"} {"{{company}}"}
-            </span>
+            Message
           </label>
+          <p className="mb-2 text-caption text-label-secondary">
+            Tap to insert a detail that fills in per person:
+          </p>
+          <MergeFields onInsert={insert} />
           <textarea
+            ref={taRef}
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={6}
             placeholder="Type your message…"
-            className={cn(inputCls, "resize-y")}
+            className={cn(inputCls, "mt-2 resize-y")}
           />
+          <div className="mt-1 text-caption text-label-secondary tabular-nums">
+            {body.length} characters
+          </div>
 
           {firstSelected ? (
             <div className="mt-3 rounded-control bg-fill p-3">
