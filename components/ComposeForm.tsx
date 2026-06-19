@@ -1,6 +1,14 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type PointerEvent as RPointerEvent,
+  type MouseEvent as RMouseEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import { Search, Check, Users, Loader2, Send, Clock } from "lucide-react";
 import { sendBulkNow } from "@/app/(app)/actions";
@@ -73,6 +81,64 @@ export function ComposeForm({
       return n;
     });
   const clearAll = () => setSelected(new Set());
+
+  // Apple/Finder-style drag-to-select (mouse): press a row and sweep across
+  // others. Touch taps a single row (so the list still scrolls). Shift-click
+  // selects a range.
+  const dragging = useRef(false);
+  const dragMode = useRef<"add" | "remove">("add");
+  const lastIndex = useRef<number | null>(null);
+  const suppressClick = useRef(false);
+
+  useEffect(() => {
+    const up = () => {
+      dragging.current = false;
+    };
+    window.addEventListener("pointerup", up);
+    return () => window.removeEventListener("pointerup", up);
+  }, []);
+
+  const applyTo = (id: string, mode: "add" | "remove") =>
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (mode === "add") n.add(id);
+      else n.delete(id);
+      return n;
+    });
+  const rangeAdd = (a: number, b: number) =>
+    setSelected((prev) => {
+      const n = new Set(prev);
+      const [lo, hi] = a < b ? [a, b] : [b, a];
+      for (let k = lo; k <= hi; k++) if (filtered[k]) n.add(filtered[k].id);
+      return n;
+    });
+
+  const rowPointerDown = (e: RPointerEvent<HTMLDivElement>, id: string, i: number) => {
+    if (e.pointerType !== "mouse") return; // touch: handled on click, keeps scroll
+    e.preventDefault();
+    if (e.shiftKey && lastIndex.current !== null) {
+      rangeAdd(lastIndex.current, i);
+    } else {
+      const mode: "add" | "remove" = selected.has(id) ? "remove" : "add";
+      applyTo(id, mode);
+      dragMode.current = mode;
+      dragging.current = true;
+    }
+    lastIndex.current = i;
+    suppressClick.current = true;
+  };
+  const rowPointerEnter = (id: string) => {
+    if (dragging.current) applyTo(id, dragMode.current);
+  };
+  const rowClick = (e: RMouseEvent<HTMLDivElement>, id: string, i: number) => {
+    if (suppressClick.current) {
+      suppressClick.current = false; // mouse already handled on pointerdown
+      return;
+    }
+    if (e.shiftKey && lastIndex.current !== null) rangeAdd(lastIndex.current, i);
+    else toggle(id);
+    lastIndex.current = i;
+  };
 
   const firstSelected = useMemo(
     () => contacts.find((c) => selected.has(c.id)),
@@ -195,20 +261,37 @@ export function ComposeForm({
           ) : null}
         </div>
 
-        <ul className="mt-2 max-h-[46vh] divide-y divide-black/[0.06] overflow-y-auto rounded-control dark:divide-white/[0.08]">
+        <p className="mt-1 text-caption2 text-label-secondary">
+          Tip: drag across names to select a bunch · shift-click for a range
+        </p>
+        <ul className="mt-1.5 max-h-[46vh] select-none divide-y divide-black/[0.06] overflow-y-auto rounded-control dark:divide-white/[0.08]">
           {filtered.length === 0 ? (
             <li className="py-8 text-center text-caption text-label-secondary">
               No contacts match.
             </li>
           ) : (
-            filtered.map((c) => {
+            filtered.map((c, i) => {
               const on = selected.has(c.id);
               return (
                 <li key={c.id}>
-                  <button
-                    type="button"
-                    onClick={() => toggle(c.id)}
-                    className="flex w-full items-center gap-3 px-1 py-2 text-left transition-colors hover:bg-fill-tertiary"
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={on}
+                    onPointerDown={(e) => rowPointerDown(e, c.id, i)}
+                    onPointerEnter={() => rowPointerEnter(c.id)}
+                    onClick={(e) => rowClick(e, c.id, i)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggle(c.id);
+                        lastIndex.current = i;
+                      }
+                    }}
+                    className={cn(
+                      "flex w-full cursor-pointer items-center gap-3 px-1 py-2 text-left transition-colors duration-fast ease-ios",
+                      on ? "bg-accent/[0.06]" : "hover:bg-fill-tertiary",
+                    )}
                   >
                     <span
                       className={cn(
@@ -220,7 +303,7 @@ export function ComposeForm({
                     >
                       {on ? <Check className="h-3.5 w-3.5" /> : null}
                     </span>
-                    <span className="min-w-0 flex-1">
+                    <span className="pointer-events-none min-w-0 flex-1">
                       <span className="block truncate text-subhead">{c.name}</span>
                       <span className="block truncate text-caption text-label-secondary">
                         {c.phone}
@@ -228,7 +311,7 @@ export function ComposeForm({
                         {c.tags?.length ? ` · ${c.tags.join(", ")}` : ""}
                       </span>
                     </span>
-                  </button>
+                  </div>
                 </li>
               );
             })
