@@ -39,7 +39,10 @@ export class BlueBubblesProvider implements MessageProvider {
     try {
       const res = await fetch(this.url("api/v1/message/text"), {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
         body: JSON.stringify({
           chatGuid,
           tempGuid,
@@ -94,7 +97,7 @@ export class BlueBubblesProvider implements MessageProvider {
         with: "handle",
         sort: "DESC",
       }),
-      { method: "GET" },
+      { method: "GET", headers: { "ngrok-skip-browser-warning": "true" } },
     );
     if (!res.ok) return [];
     const json = await res.json().catch(() => ({}));
@@ -124,7 +127,10 @@ export class BlueBubblesProvider implements MessageProvider {
 
   async ping(): Promise<boolean> {
     try {
-      const res = await fetch(this.url("api/v1/ping"), { method: "GET" });
+      const res = await fetch(this.url("api/v1/ping"), {
+        method: "GET",
+        headers: { "ngrok-skip-browser-warning": "true" },
+      });
       const j = await res.json().catch(() => ({}));
       return j?.data === "pong";
     } catch {
@@ -133,7 +139,10 @@ export class BlueBubblesProvider implements MessageProvider {
   }
 
   async getInfo(): Promise<unknown> {
-    const res = await fetch(this.url("api/v1/server/info"), { method: "GET" });
+    const res = await fetch(this.url("api/v1/server/info"), {
+      method: "GET",
+      headers: { "ngrok-skip-browser-warning": "true" },
+    });
     return res.json().catch(() => ({}));
   }
 
