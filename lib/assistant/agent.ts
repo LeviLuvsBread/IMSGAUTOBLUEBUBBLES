@@ -166,23 +166,18 @@ export async function runReadTool(
   args: Args,
 ): Promise<unknown> {
   if (name === "find_contacts") {
-    let q = supabase
-      .from("contacts")
-      .select("id,name,phone,company,tags,opted_out")
-      .limit(Math.min(Number(args.limit) || 50, 200));
+    let q = supabase.from("contacts").select("id,name,phone,company,tags,opted_out");
     if (args.company) q = q.ilike("company", `%${args.company}%`);
     if (args.tag) q = q.contains("tags", [args.tag]);
-    const { data } = await q;
-    let rows = (data ?? []) as Contact[];
     if (args.query) {
-      const s = String(args.query).toLowerCase();
-      rows = rows.filter(
-        (r) =>
-          (r.name || "").toLowerCase().includes(s) ||
-          (r.phone || "").includes(s) ||
-          (r.company || "").toLowerCase().includes(s),
-      );
+      // Search the WHOLE table at the DB level (not a capped in-memory slice).
+      // Sanitize so the value can't break the PostgREST or() filter syntax.
+      const s = String(args.query).replace(/[,()*]/g, " ").trim();
+      if (s) q = q.or(`name.ilike.%${s}%,company.ilike.%${s}%,phone.ilike.%${s}%`);
     }
+    q = q.order("name").limit(Math.min(Number(args.limit) || 50, 200));
+    const { data } = await q;
+    const rows = (data ?? []) as Contact[];
     return {
       count: rows.length,
       contacts: rows.slice(0, 50).map((r) => ({
