@@ -101,7 +101,7 @@ export function Assistant() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
             transition={{ type: "spring", stiffness: 420, damping: 34 }}
-            className="material-thick fixed bottom-24 right-5 z-[60] flex h-[min(70vh,560px)] w-[min(92vw,400px)] flex-col overflow-hidden rounded-card-lg shadow-overlay ring-1 ring-white/15"
+            className="liquid-glass fixed bottom-24 right-5 z-[60] flex h-[min(70vh,560px)] w-[min(92vw,400px)] flex-col overflow-hidden rounded-card-lg ring-1 ring-white/15"
           >
             <div className="flex items-center gap-2 border-b border-separator px-4 py-3">
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/15 text-accent">
