@@ -8,6 +8,7 @@ import { MessageCircle, Search } from "lucide-react";
 import { NAV_ITEMS } from "./nav-items";
 import { HealthBadge } from "./HealthBadge";
 import { CommandPalette } from "./CommandPalette";
+import { Assistant } from "./Assistant";
 import { ThemeToggle } from "./ThemeToggle";
 import { Tooltip } from "./Tooltip";
 import { cn } from "@/lib/cn";
@@ -250,6 +251,7 @@ export function AppShell({
       </nav>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <Assistant />
     </div>
   );
 }
