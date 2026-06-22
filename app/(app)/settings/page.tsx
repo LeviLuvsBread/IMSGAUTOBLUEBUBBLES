@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { saveSettings } from "../actions";
 import { SecretCodeCard } from "@/components/SecretCodeCard";
 import { TwoFactorSetup } from "@/components/TwoFactorSetup";
+import { WallpaperPicker } from "@/components/WallpaperPicker";
 import { THROTTLE_DEFAULTS } from "@/lib/throttle";
 import type { AppSettings } from "@/lib/types";
 
@@ -321,6 +322,13 @@ export default async function SettingsPage() {
           Save settings
         </button>
       </form>
+
+      <Section
+        title="Appearance"
+        footnote="Pick a wallpaper for the background. The interface stays frosted glass over it; if anything is hard to read, bump the dimming slider."
+      >
+        <WallpaperPicker />
+      </Section>
 
       <Section
         title="Security"

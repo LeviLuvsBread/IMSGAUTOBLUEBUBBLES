@@ -86,8 +86,12 @@ body {
   height: 100%;
 }
 
-body {
+html {
   background: rgb(var(--canvas));
+}
+
+body {
+  background: transparent;
   color: rgb(var(--label));
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
     "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -138,6 +142,29 @@ h3,
     radial-gradient(900px 520px at 100% -8%, rgb(var(--accent) / 0.18), transparent 60%),
     radial-gradient(760px 460px at -8% 108%, rgb(var(--accent-2) / 0.12), transparent 55%),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+}
+
+/* Wallpaper layer — a fixed image/gradient behind everything, with an
+   adjustable dimming scrim so UI + text stay legible over any wallpaper.
+   Set by the picker (and a no-flash script in the root layout). */
+.app-wallpaper {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--wallpaper-bg, none);
+  background-size: cover;
+  background-position: center;
+}
+.app-wallpaper::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgb(var(--canvas) / var(--wallpaper-scrim, 0));
+}
+/* When a wallpaper is active, drop the ambient blobs so it reads cleanly. */
+html[data-wallpaper="on"] .app-bg {
+  background-image: none;
 }
 
 /* Liquid Glass materials — translucent, deep blur, with a specular edge

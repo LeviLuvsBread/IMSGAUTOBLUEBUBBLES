@@ -30,6 +30,9 @@ export const viewport: Viewport = {
 // so there's no flash of the wrong theme on load.
 const themeScript = `(function(){try{var t=localStorage.getItem('theme')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);var r=document.documentElement;r.classList.toggle('dark',d);r.style.colorScheme=d?'dark':'light';}catch(e){}})();`;
 
+// Applies the saved wallpaper + dimming before first paint (no flash).
+const wallpaperScript = `(function(){try{var w=localStorage.getItem('wallpaper');if(w){var r=document.documentElement;r.style.setProperty('--wallpaper-bg',w);r.style.setProperty('--wallpaper-scrim',localStorage.getItem('wallpaperScrim')||'0.42');r.dataset.wallpaper='on';}}catch(e){}})();`;
+
 export default function RootLayout({
   children,
 }: {
@@ -39,6 +42,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: wallpaperScript }} />
+        <div className="app-wallpaper" aria-hidden="true" />
         {children}
       </body>
     </html>
