@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTransition } from "react";
 import { motion, type Variants } from "framer-motion";
 import {
   PenSquare,
@@ -9,8 +10,9 @@ import {
   TrendingUp,
   Clock,
   AlertTriangle,
-  CheckCircle2,
   Pause,
+  Play,
+  Loader2,
   RotateCcw,
   ChevronRight,
   Info,
@@ -206,6 +208,72 @@ function Action({
   );
 }
 
+/** Interactive pause/resume pill for the send pump. */
+function PauseToggle({
+  paused,
+  setPaused,
+}: {
+  paused: boolean;
+  setPaused: (paused: boolean) => void | Promise<void>;
+}) {
+  const [pending, startTransition] = useTransition();
+  const toggle = () =>
+    startTransition(async () => {
+      await setPaused(!paused);
+    });
+
+  return (
+    <Tooltip
+      side="left"
+      label={
+        paused
+          ? "Sending is paused — nothing leaves the queue. Click to resume."
+          : "The pump is sending on your throttle schedule. Click to pause the queue."
+      }
+    >
+      <motion.button
+        type="button"
+        onClick={toggle}
+        disabled={pending}
+        aria-pressed={paused}
+        aria-label={paused ? "Resume sending" : "Pause sending"}
+        whileTap={{ scale: 0.95 }}
+        animate={
+          paused && !pending
+            ? { opacity: [1, 0.6, 1] }
+            : { opacity: 1 }
+        }
+        transition={
+          paused && !pending
+            ? { duration: 1.6, repeat: Infinity, ease: "easeInOut" }
+            : { duration: 0.2 }
+        }
+        className={cn(
+          "press inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-caption font-medium transition-colors duration-fast ease-ios disabled:opacity-70",
+          paused
+            ? "bg-warning/10 text-warning hover:bg-warning/20"
+            : "bg-success/10 text-success hover:bg-success/20",
+        )}
+      >
+        {pending ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : paused ? (
+          <Play className="h-3 w-3 fill-current" />
+        ) : (
+          <Pause className="h-3 w-3 fill-current" />
+        )}
+        {pending
+          ? paused
+            ? "Resuming…"
+            : "Pausing…"
+          : paused
+            ? "Paused · Resume"
+            : "Active · Pause"}
+      </motion.button>
+    </Tooltip>
+  );
+}
+
 export function Dashboard({
   sentToday,
   dailyCap,
@@ -218,7 +286,11 @@ export function Dashboard({
   failedRows,
   handovers,
   requeue,
-}: DashboardData & { requeue: (formData: FormData) => void }) {
+  setPaused,
+}: DashboardData & {
+  requeue: (formData: FormData) => void;
+  setPaused: (paused: boolean) => void | Promise<void>;
+}) {
   return (
     <motion.div
       variants={container}
@@ -232,24 +304,7 @@ export function Dashboard({
           <p className="text-footnote text-label-secondary">{greeting()}</p>
           <h1 className="text-h4 font-display">Dashboard</h1>
         </div>
-        <Tooltip
-          side="left"
-          label={
-            paused
-              ? "Sending is paused — nothing goes out until you resume it in Settings."
-              : "The send pump is active and sending on your throttle schedule."
-          }
-        >
-          {paused ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-3 py-1 text-caption font-medium text-warning">
-              <Pause className="h-3 w-3" /> Paused
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-caption font-medium text-success">
-              <CheckCircle2 className="h-3 w-3" /> Active
-            </span>
-          )}
-        </Tooltip>
+        <PauseToggle paused={paused} setPaused={setPaused} />
       </motion.div>
 
       {/* Stat cards */}

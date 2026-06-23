@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { requeueMessage } from "./actions";
+import { requeueMessage, setQueuePaused } from "./actions";
 import { Dashboard } from "@/components/dashboard/Dashboard";
 import type { AppSettings, Message } from "@/lib/types";
 
@@ -91,6 +91,7 @@ export default async function DashboardPage() {
         summary: h.handover_summary,
       }))}
       requeue={requeueMessage}
+      setPaused={setQueuePaused}
     />
   );
 }

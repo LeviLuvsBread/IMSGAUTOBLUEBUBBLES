@@ -272,6 +272,18 @@ export async function saveSettings(formData: FormData) {
   redirect("/settings");
 }
 
+// Quick pause/resume toggle for the send pump. claim_next_send() returns early
+// while paused, so nothing leaves the queue until it's resumed.
+export async function setQueuePaused(paused: boolean) {
+  const { supabase } = await requireUser();
+  await supabase
+    .from("app_settings")
+    .update({ paused, updated_at: new Date().toISOString() })
+    .eq("id", true);
+  revalidatePath("/");
+  revalidatePath("/settings");
+}
+
 // ---------------- AI responder: drafts + per-thread autopilot ----------------
 
 // Approve a held AI draft → release it to the pump and count the AI turn.
