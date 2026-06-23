@@ -41,8 +41,10 @@ const splitTags = (s: string) =>
 export function ContactImport() {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<"upload" | "map" | "done">("upload");
+  const [dragging, setDragging] = useState(false);
   const [fileName, setFileName] = useState("");
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<string[][]>([]);
@@ -53,11 +55,35 @@ export function ContactImport() {
 
   const reset = () => {
     setStep("upload");
+    setDragging(false);
     setFileName("");
     setHeaders([]);
     setRows([]);
     setResult(null);
     setTagAll("");
+  };
+
+  // dragenter/dragleave fire for every child element, so we track depth with a
+  // counter and only drop the highlight once we've truly left the drop zone.
+  const onDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepth.current += 1;
+    setDragging(true);
+  };
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  };
+  const onDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDragging(false);
+  };
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepth.current = 0;
+    setDragging(false);
+    onFile(e.dataTransfer.files?.[0]);
   };
 
   const close = () => {
@@ -187,20 +213,60 @@ export function ContactImport() {
 
               <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
                 {step === "upload" ? (
-                  <button
+                  <motion.div
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Upload a spreadsheet — click to browse or drop a file here"
                     onClick={() => fileRef.current?.click()}
-                    className="press flex w-full flex-col items-center justify-center gap-3 rounded-card border-2 border-dashed border-separator py-12 text-center transition-colors hover:bg-fill-tertiary"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        fileRef.current?.click();
+                      }
+                    }}
+                    onDragEnter={onDragEnter}
+                    onDragOver={onDragOver}
+                    onDragLeave={onDragLeave}
+                    onDrop={onDrop}
+                    whileTap={{ scale: 0.99 }}
+                    animate={{ scale: dragging ? 1.015 : 1 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 26 }}
+                    className={cn(
+                      "flex w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-card border-2 border-dashed py-12 text-center outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent",
+                      dragging
+                        ? "border-accent bg-accent/[0.06]"
+                        : "border-separator hover:bg-fill-tertiary",
+                    )}
                   >
-                    <span className="flex h-12 w-12 items-center justify-center rounded-card bg-accent/10 text-accent">
+                    <motion.span
+                      animate={
+                        dragging
+                          ? { scale: 1.12, y: -3, rotate: -3 }
+                          : { scale: 1, y: 0, rotate: 0 }
+                      }
+                      transition={{ type: "spring", stiffness: 380, damping: 16 }}
+                      className={cn(
+                        "flex h-12 w-12 items-center justify-center rounded-card transition-colors",
+                        dragging ? "bg-accent text-white" : "bg-accent/10 text-accent",
+                      )}
+                    >
                       <FileSpreadsheet className="h-6 w-6" />
+                    </motion.span>
+                    <span className="text-subhead font-medium">
+                      {dragging ? "Drop to import" : "Choose a spreadsheet"}
                     </span>
-                    <span className="text-subhead font-medium">Choose a spreadsheet</span>
                     <span className="text-caption text-label-secondary">
-                      CSV, Excel (.xlsx, .xls), or Numbers/Sheets export (.ods)
-                      <br />
-                      Headers in the first row · phone numbers in any format
+                      {dragging ? (
+                        "Release the file anywhere in this box"
+                      ) : (
+                        <>
+                          Drag &amp; drop a file, or click to browse
+                          <br />
+                          CSV, Excel (.xlsx, .xls), or Numbers/Sheets export (.ods)
+                        </>
+                      )}
                     </span>
-                  </button>
+                  </motion.div>
                 ) : null}
 
                 {step === "map" ? (
