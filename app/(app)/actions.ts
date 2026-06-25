@@ -173,24 +173,42 @@ export async function importContacts(rows: ImportRow[]): Promise<ImportResult> {
 // (matched by name) so it's safe to re-run from "Load starter pack".
 export async function seedStarterTemplates(): Promise<{
   added: number;
-  skipped: number;
+  updated: number;
 }> {
   const { supabase, userId } = await requireUser();
-  const { data: existing } = await supabase.from("templates").select("name");
-  const have = new Set(
-    (existing ?? []).map((t: { name: string }) => t.name.trim().toLowerCase()),
+  const { data: existing } = await supabase
+    .from("templates")
+    .select("id, name, body");
+  const byName = new Map(
+    (existing ?? []).map((t: { id: string; name: string; body: string }) => [
+      t.name.trim().toLowerCase(),
+      t,
+    ]),
   );
-  const toAdd = STARTER_TEMPLATES.filter(
-    (t) => !have.has(t.name.trim().toLowerCase()),
-  ).map((t) => ({
-    owner_id: userId,
-    name: t.name,
-    body: t.body,
-    variables: extractVariables(t.body),
-  }));
-  if (toAdd.length) await supabase.from("templates").insert(toAdd);
+
+  let added = 0;
+  let updated = 0;
+  for (const t of STARTER_TEMPLATES) {
+    const match = byName.get(t.name.trim().toLowerCase());
+    const variables = extractVariables(t.body);
+    if (!match) {
+      await supabase
+        .from("templates")
+        .insert({ owner_id: userId, name: t.name, body: t.body, variables });
+      added++;
+    } else if (match.body !== t.body) {
+      // Refresh an existing starter to the latest (spintax) wording. Only
+      // when the body differs, so reloading an up-to-date pack is a no-op.
+      await supabase
+        .from("templates")
+        .update({ body: t.body, variables })
+        .eq("id", match.id);
+      updated++;
+    }
+  }
+
   revalidatePath("/templates");
-  return { added: toAdd.length, skipped: STARTER_TEMPLATES.length - toAdd.length };
+  return { added, updated };
 }
 
 // Returns the BlueBubbles webhook + pump URLs WITH their secrets. These are

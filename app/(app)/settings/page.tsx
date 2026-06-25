@@ -184,21 +184,21 @@ export default async function SettingsPage() {
       <form action={saveSettings} className="space-y-7">
         <Section
           title="Throttle"
-          footnote="Conservative defaults keep a real personal number under informal limits. Raise the daily cap slowly over the first week."
+          footnote="Slow, randomized spacing keeps a real personal number under informal limits. Recommended: 120s min delay + 60s jitter (≈2–3 min between sends). Raise the daily cap slowly over the first week."
         >
           <Group>
             <FieldRow
               label="Min delay"
               name="min_delay_seconds"
               unit="sec"
-              help="Shortest pause before the next send."
+              help="Shortest pause before the next send. 120s recommended."
               defaultValue={s?.min_delay_seconds ?? THROTTLE_DEFAULTS.min_delay_seconds}
             />
             <FieldRow
               label="Jitter"
               name="jitter_seconds"
               unit="sec"
-              help="Random extra delay added on top, so timing looks human."
+              help="Random extra delay added on top, so timing looks human. 60s recommended."
               defaultValue={s?.jitter_seconds ?? THROTTLE_DEFAULTS.jitter_seconds}
             />
             <FieldRow

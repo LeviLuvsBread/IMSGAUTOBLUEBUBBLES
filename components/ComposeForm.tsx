@@ -145,7 +145,10 @@ export function ComposeForm({
     [contacts, selected],
   );
   const preview = useMemo(
-    () => (firstSelected ? renderForContact(body, firstSelected) : body),
+    () =>
+      firstSelected
+        ? renderForContact(body, firstSelected, { rand: () => 0 })
+        : body,
     [body, firstSelected],
   );
 

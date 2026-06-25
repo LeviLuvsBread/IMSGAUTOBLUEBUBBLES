@@ -4,9 +4,12 @@
 
 import type { AppSettings } from "./types";
 
+// Spacing is deliberately slow: ~2-3 min between sends (min_delay + up to
+// jitter = 120-180s). Bursty, evenly-timed sending is a spam signal, so we
+// keep a long, randomized gap to stay under informal limits.
 export const THROTTLE_DEFAULTS = {
-  min_delay_seconds: 45,
-  jitter_seconds: 75,
+  min_delay_seconds: 120,
+  jitter_seconds: 60,
   daily_cap: 40,
   batch_size: 10,
   send_window_start: 9,

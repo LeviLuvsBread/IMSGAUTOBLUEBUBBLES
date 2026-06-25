@@ -13,10 +13,13 @@ export function SeedTemplatesButton() {
   const run = () =>
     start(async () => {
       const res = await seedStarterTemplates();
+      const parts: string[] = [];
+      if (res.added > 0) parts.push(`added ${res.added}`);
+      if (res.updated > 0) parts.push(`refreshed ${res.updated}`);
       setMsg(
-        res.added > 0
-          ? `Added ${res.added} template${res.added === 1 ? "" : "s"}`
-          : "All starter templates already loaded",
+        parts.length
+          ? `Starter pack — ${parts.join(", ")}`
+          : "Starter templates already up to date",
       );
       router.refresh();
       setTimeout(() => setMsg(null), 4000);
