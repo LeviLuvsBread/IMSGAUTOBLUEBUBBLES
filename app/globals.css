@@ -292,6 +292,32 @@ html[data-wallpaper="on"] .app-bg {
     fill var(--dur-base) var(--ease-out) !important;
 }
 
+/* Tab/page content reveal — runs whenever a route's content mounts, including
+   when it replaces its skeleton, so every tab animates in (not just the
+   dashboard, which has its own staggered entrance). */
+@keyframes tab-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.tab-in > * {
+  animation: tab-in 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* iOS-style theme switch: the View Transitions API crossfades a GPU snapshot of
+   the whole page (smooth + quick) instead of transitioning every element's
+   colors at once (which janked). See ThemeToggle. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.28s;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 /* Keyboard focus — a tight ring that hugs the control's own shape (modern
    outline follows border-radius). Text inputs opt out: they signal focus via
    the caret + their field styling, so we never wrap an input in a floating

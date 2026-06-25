@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { MessageCircle, Search } from "lucide-react";
 import { NAV_ITEMS } from "./nav-items";
 import { HealthBadge } from "./HealthBadge";
@@ -185,7 +185,7 @@ export function AppShell({
       <div className="flex min-w-0 flex-1 flex-col">
         <header
           style={{ boxShadow: "none" }}
-          className="glass safe-top sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-3"
+          className="glass safe-top sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 px-4 py-4 md:px-8"
         >
           <div className="flex items-center gap-2 md:hidden">
             <span className={cn("flex h-7 w-7 items-center justify-center rounded-row brand-gradient text-white", markGlow)}>
@@ -217,17 +217,13 @@ export function AppShell({
 
         <main className="flex-1 px-4 py-5 pb-28 md:px-8 md:pb-10">
           <div className="mx-auto w-full max-w-content">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={pathname}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-              >
-                {children}
-              </motion.div>
-            </AnimatePresence>
+            {/* key=pathname remounts on navigation; the `.tab-in` CSS animates
+                whatever mounts inside (skeleton, then the real content when it
+                replaces the skeleton). The dashboard ("/") is excluded — it has
+                its own staggered entrance. */}
+            <div key={pathname} className={cn(pathname !== "/" && "tab-in")}>
+              {children}
+            </div>
           </div>
         </main>
       </div>

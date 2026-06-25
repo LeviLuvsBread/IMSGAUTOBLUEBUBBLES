@@ -361,7 +361,8 @@ export function Dashboard({
           value={<AnimatedNumber value={failed} />}
           tone={failed > 0 ? "red" : "neutral"}
           sub="needs attention"
-          info="Sends that didn’t go through (bridge offline, bad number, etc.). Use Requeue below to try them again."
+          info="Sends that didn’t go through (bridge offline, bad number, etc.). Opens the Queue to review and requeue them."
+          href="/queue"
         />
         <StatCard
           icon={TrendingUp}
@@ -369,7 +370,8 @@ export function Dashboard({
           value={`${minDelay}–${maxDelay}s`}
           tone="neutral"
           sub="delay between sends"
-          info="A random pause between each send so your texting looks human. Adjust the min delay and jitter in Settings."
+          info="A random pause between each send so your texting looks human. Tap to adjust the min delay and jitter in Settings."
+          href="/settings"
         />
       </motion.div>
 

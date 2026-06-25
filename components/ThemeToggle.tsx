@@ -6,17 +6,38 @@ import { cn } from "@/lib/cn";
 
 type Theme = "system" | "light" | "dark";
 
-function applyTheme(theme: Theme) {
+function applyTheme(theme: Theme, animate = false) {
   const dark =
     theme === "dark" ||
     (theme === "system" &&
       window.matchMedia("(prefers-color-scheme: dark)").matches);
   const root = document.documentElement;
-  // brief cross-fade only during an explicit switch (no flash on first paint)
-  root.classList.add("theme-transition");
-  root.classList.toggle("dark", dark);
-  root.style.colorScheme = dark ? "dark" : "light";
-  window.setTimeout(() => root.classList.remove("theme-transition"), 320);
+
+  const commit = () => {
+    root.classList.toggle("dark", dark);
+    root.style.colorScheme = dark ? "dark" : "light";
+  };
+
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // iOS-style: crossfade a GPU snapshot of the whole page (smooth + quick)
+  // rather than transitioning every element's colors at once.
+  const startVT = (
+    document as Document & {
+      startViewTransition?: (cb: () => void) => unknown;
+    }
+  ).startViewTransition;
+  if (animate && !reduced && typeof startVT === "function") {
+    startVT.call(document, commit);
+    return;
+  }
+
+  // Fallback for browsers without View Transitions: brief color cross-fade.
+  if (animate && !reduced) {
+    root.classList.add("theme-transition");
+    window.setTimeout(() => root.classList.remove("theme-transition"), 320);
+  }
+  commit();
 }
 
 const OPTS: { value: Theme; icon: LucideIcon; label: string }[] = [
@@ -33,7 +54,8 @@ export function ThemeToggle() {
     setTheme(stored);
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = () => {
-      if ((localStorage.getItem("theme") as Theme) === "system") applyTheme("system");
+      if ((localStorage.getItem("theme") as Theme) === "system")
+        applyTheme("system", true);
     };
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
@@ -42,7 +64,7 @@ export function ThemeToggle() {
   const choose = (t: Theme) => {
     localStorage.setItem("theme", t);
     setTheme(t);
-    applyTheme(t);
+    applyTheme(t, true);
   };
 
   return (

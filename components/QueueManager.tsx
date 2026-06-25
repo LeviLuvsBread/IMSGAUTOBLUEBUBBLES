@@ -16,6 +16,8 @@ import {
   Pause,
   ArrowUpToLine,
   ArrowDownToLine,
+  AlertTriangle,
+  RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { humanizeSeconds } from "@/lib/throttle";
@@ -26,6 +28,14 @@ export type QueueItem = {
   phone: string;
   body: string;
   source: string;
+};
+
+export type FailedItem = {
+  id: string;
+  name: string;
+  phone: string;
+  body: string;
+  error: string | null;
 };
 
 function initials(s: string) {
@@ -141,18 +151,22 @@ function Row({
 
 export function QueueManager({
   initial,
+  failed,
   paused,
   minDelay,
   maxDelay,
   clearQueue,
   reorderQueue,
+  requeue,
 }: {
   initial: QueueItem[];
+  failed: FailedItem[];
   paused: boolean;
   minDelay: number;
   maxDelay: number;
   clearQueue: () => Promise<{ canceled: number }>;
   reorderQueue: (orderedIds: string[]) => void | Promise<void>;
+  requeue: (formData: FormData) => void;
 }) {
   const [items, setItems] = useState<QueueItem[]>(initial);
   const itemsRef = useRef(items);
@@ -287,6 +301,42 @@ export function QueueManager({
           ))}
         </Reorder.Group>
       )}
+
+      {failed.length > 0 ? (
+        <section
+          id="failed"
+          className="rounded-card border border-danger/20 bg-danger/[0.04] p-2"
+        >
+          <h2 className="flex items-center gap-1.5 px-3 py-2 text-subhead font-semibold text-danger">
+            <AlertTriangle className="h-4 w-4" /> Failed — needs attention (
+            {failed.length})
+          </h2>
+          <ul>
+            {failed.map((m) => (
+              <li key={m.id} className="flex items-center gap-3 px-3 py-2">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-danger/10 text-caption font-semibold text-danger">
+                  {initials(m.name || m.phone)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-subhead font-medium">
+                    {m.name || m.phone}
+                  </span>
+                  <span className="block truncate text-caption text-label-secondary">
+                    {m.body || "—"}
+                    {m.error ? ` · ${m.error}` : ""}
+                  </span>
+                </span>
+                <form action={requeue}>
+                  <input type="hidden" name="id" value={m.id} />
+                  <button className="press inline-flex items-center gap-1 rounded-control border border-hairline px-2.5 py-1 text-footnote transition-colors duration-fast ease-ios hover:bg-fill-tertiary">
+                    <RotateCcw className="h-3 w-3" /> Requeue
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }
