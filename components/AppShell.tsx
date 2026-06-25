@@ -183,7 +183,10 @@ export function AppShell({
 
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="glass hairline-b safe-top sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-3">
+        <header
+          style={{ boxShadow: "none" }}
+          className="glass safe-top sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-3"
+        >
           <div className="flex items-center gap-2 md:hidden">
             <span className={cn("flex h-7 w-7 items-center justify-center rounded-row brand-gradient text-white", markGlow)}>
               <MessageCircle className="h-4 w-4" />
