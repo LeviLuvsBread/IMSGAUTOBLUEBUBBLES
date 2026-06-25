@@ -40,6 +40,7 @@ const SOURCE_LABEL: Record<string, string> = {
   sequence: "Sequence",
   reply: "Reply",
   ai: "AI",
+  auto_outreach: "Auto (AI)",
 };
 
 function Row({

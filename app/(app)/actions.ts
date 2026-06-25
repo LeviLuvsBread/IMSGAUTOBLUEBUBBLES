@@ -459,6 +459,52 @@ export async function sendBulkNow(
   return { queued, skipped: ids.length - contacts.length };
 }
 
+// Auto outreach: queue an AI-written opener for each selected contact. The text
+// is generated just-in-time by the pump (anchored to the user's cold-outreach
+// templates), so each person gets a unique, on-message opener. We enqueue a
+// spintax-varied template as the body now — it's both the fallback if the AI
+// call fails and the style anchor. Skips opted-out / missing.
+export async function sendBulkAuto(
+  contactIds: string[],
+): Promise<{ queued: number; skipped: number }> {
+  const { supabase, userId } = await requireUser();
+  const ids = Array.isArray(contactIds)
+    ? [...new Set(contactIds.filter(Boolean))]
+    : [];
+  if (ids.length === 0) return { queued: 0, skipped: 0 };
+
+  const { data } = await supabase
+    .from("contacts")
+    .select("*")
+    .in("id", ids)
+    .eq("opted_out", false);
+  const contacts = (data ?? []) as Contact[];
+  if (contacts.length === 0) return { queued: 0, skipped: ids.length };
+
+  // Anchor templates: the user's cold-outreach templates, else the starters.
+  const { data: tpls } = await supabase.from("templates").select("name, body");
+  const cold = (tpls ?? [])
+    .filter((t: { name: string }) => /cold outreach/i.test(t.name))
+    .map((t: { body: string }) => t.body);
+  const anchors = cold.length ? cold : STARTER_TEMPLATES.map((t) => t.body);
+
+  const inputs: EnqueueInput[] = contacts.map((c) => {
+    const anchor = anchors[Math.floor(Math.random() * anchors.length)];
+    return {
+      ownerId: userId,
+      chatGuid: c.chat_guid ?? chatGuidForPhone(c.phone),
+      contactId: c.id,
+      body: renderForContact(anchor, c), // spintax-varied fallback + anchor
+      source: "auto_outreach",
+      aiGenerated: false,
+    };
+  });
+  const queued = inputs.length ? await enqueueBulk(supabase, inputs) : 0;
+  revalidatePath("/");
+  revalidatePath("/queue");
+  return { queued, skipped: ids.length - contacts.length };
+}
+
 // ---------------- one-off send ----------------
 export async function sendNow(formData: FormData) {
   const { supabase, userId } = await requireUser();

@@ -3,9 +3,14 @@ import { createClient } from "@/lib/supabase/server";
 import { ContactForm } from "@/components/ContactForm";
 import { ContactImport } from "@/components/ContactImport";
 import { deleteContact } from "../actions";
+import { lastContactedMap } from "@/lib/last-contacted";
+import { timeAgo, daysSince } from "@/lib/format";
+import { cn } from "@/lib/cn";
 import type { Contact } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+
+const RECENT_DAYS = 7;
 
 function initials(s: string) {
   const m = (s || "").replace(/[^a-zA-Z0-9]/g, "");
@@ -14,10 +19,10 @@ function initials(s: string) {
 
 export default async function ContactsPage() {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("contacts")
-    .select("*")
-    .order("name", { ascending: true });
+  const [{ data }, lastContacted] = await Promise.all([
+    supabase.from("contacts").select("*").order("name", { ascending: true }),
+    lastContactedMap(supabase),
+  ]);
   const contacts = (data ?? []) as Contact[];
 
   return (
@@ -66,6 +71,21 @@ export default async function ContactsPage() {
                   {c.company ? ` · ${c.company}` : ""}
                   {c.tags.length ? ` · ${c.tags.join(", ")}` : ""}
                 </div>
+                {(() => {
+                  const last = lastContacted[c.id];
+                  const d = daysSince(last);
+                  const recent = d !== null && d < RECENT_DAYS;
+                  return (
+                    <div
+                      className={cn(
+                        "mt-0.5 text-caption2",
+                        recent ? "font-medium text-warning" : "text-label-tertiary",
+                      )}
+                    >
+                      {last ? `Last contacted ${timeAgo(last)}` : "Not yet contacted"}
+                    </div>
+                  );
+                })()}
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 <Link

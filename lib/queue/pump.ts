@@ -6,6 +6,8 @@ import { renderTemplate, contactVars } from "@/lib/templating";
 import { resolveSegment } from "@/lib/segments";
 import { enqueueMessage, enqueueBulk, type EnqueueInput } from "@/lib/queue/enqueue";
 import { chatGuidForPhone } from "@/lib/chat";
+import { generateOpener, type OpenerContext } from "@/lib/ai/generate-opener";
+import { STARTER_TEMPLATES } from "@/lib/starter-templates";
 import type { Contact, Message } from "@/lib/types";
 
 export interface PumpResult {
@@ -44,6 +46,28 @@ export async function runPump(maxBatch = 10): Promise<PumpResult> {
   let sent = 0;
   let failed = 0;
 
+  // Lazily-loaded context for "auto_outreach" rows — the user's opener
+  // templates + compliance knowledge. Fetched once per tick, only if needed.
+  let openerCtx: OpenerContext | null = null;
+  const getOpenerCtx = async (): Promise<OpenerContext> => {
+    if (openerCtx) return openerCtx;
+    const { data: tpls } = await admin
+      .from("templates")
+      .select("name, body")
+      .eq("owner_id", ownerId);
+    const cold = (tpls ?? [])
+      .filter((t: { name: string }) => /cold outreach/i.test(t.name))
+      .map((t: { body: string }) => t.body);
+    const anchors = cold.length ? cold : STARTER_TEMPLATES.map((t) => t.body);
+    const { data: s } = await admin
+      .from("app_settings")
+      .select("ai_knowledge")
+      .eq("id", true)
+      .maybeSingle();
+    openerCtx = { knowledge: (s?.ai_knowledge as string) ?? null, anchors };
+    return openerCtx;
+  };
+
   for (let i = 0; i < maxBatch; i++) {
     const { data, error } = await admin.rpc("claim_next_send");
     if (error) break;
@@ -51,9 +75,37 @@ export async function runPump(maxBatch = 10): Promise<PumpResult> {
     if (rows.length === 0) break; // gate/cap/window closed or queue empty
     const row = rows[0];
 
+    // Auto-outreach: generate a unique, on-message opener just-in-time. On any
+    // failure we fall back to the row's body (a spintax-varied template) and
+    // leave ai_generated=false so a later retry can try generating again.
+    let body = row.body;
+    if (row.source === "auto_outreach" && !row.ai_generated) {
+      const ctx = await getOpenerCtx();
+      let contact: { name: string | null; company: string | null } | null = null;
+      if (row.contact_id) {
+        const { data: c } = await admin
+          .from("contacts")
+          .select("name, company")
+          .eq("id", row.contact_id)
+          .maybeSingle();
+        contact = (c as { name: string | null; company: string | null } | null) ?? null;
+      }
+      const gen = await generateOpener(
+        { name: contact?.name ?? "", company: contact?.company ?? null },
+        ctx,
+      );
+      if (gen) {
+        body = gen;
+        await admin
+          .from("messages")
+          .update({ body: gen, ai_generated: true, updated_at: nowIso() })
+          .eq("id", row.id);
+      }
+    }
+
     const res = await provider.sendMessage({
       chatGuid: row.chat_guid,
-      message: row.body,
+      message: body,
       tempGuid: row.bb_temp_guid ?? crypto.randomUUID(),
     });
 

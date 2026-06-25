@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { ComposeForm } from "@/components/ComposeForm";
+import { lastContactedMap } from "@/lib/last-contacted";
 import type { Contact, Template } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ export default async function ComposePage({
 }) {
   const sp = await searchParams;
   const supabase = await createClient();
-  const [{ data: contacts }, { data: templates }, { data: settings }] =
+  const [{ data: contacts }, { data: templates }, { data: settings }, lastContacted] =
     await Promise.all([
       supabase.from("contacts").select("*").eq("opted_out", false).order("name"),
       supabase.from("templates").select("*").order("name"),
@@ -21,6 +22,7 @@ export default async function ComposePage({
         .select("min_delay_seconds,jitter_seconds,daily_cap,sends_today")
         .eq("id", true)
         .maybeSingle(),
+      lastContactedMap(supabase),
     ]);
   const list = (contacts ?? []) as Contact[];
   const s = settings as {
@@ -57,6 +59,7 @@ export default async function ComposePage({
         <ComposeForm
           contacts={list}
           templates={(templates ?? []) as Template[]}
+          lastContacted={lastContacted}
           minDelay={s?.min_delay_seconds ?? 0}
           jitter={s?.jitter_seconds ?? 0}
           dailyCap={s?.daily_cap ?? 100}

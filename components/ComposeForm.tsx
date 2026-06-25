@@ -10,16 +10,53 @@ import {
   type MouseEvent as RMouseEvent,
 } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Check, Users, Loader2, Send, Clock } from "lucide-react";
-import { sendBulkNow } from "@/app/(app)/actions";
+import {
+  Search,
+  Check,
+  Users,
+  Loader2,
+  Send,
+  Clock,
+  Sparkles,
+  AlertTriangle,
+} from "lucide-react";
+import { sendBulkNow, sendBulkAuto } from "@/app/(app)/actions";
 import { renderForContact } from "@/lib/templating";
+import { timeAgo, daysSince } from "@/lib/format";
 import { MergeFields } from "@/components/MergeFields";
 import { cn } from "@/lib/cn";
 import type { Contact, Template } from "@/lib/types";
 
+// Sentinel template-select value for AI auto-opener mode.
+const AUTO = "__auto__";
+// Selecting someone contacted within this many days flags a re-message warning.
+const RECENT_DAYS = 7;
+
+// "Last contacted" chip for a recipient row — amber if it was recent.
+function LastPill({ iso }: { iso?: string }) {
+  if (!iso) return null;
+  const d = daysSince(iso);
+  const recent = d !== null && d < RECENT_DAYS;
+  return (
+    <span
+      suppressHydrationWarning
+      title={`Last contacted ${timeAgo(iso)}`}
+      className={cn(
+        "shrink-0 rounded-full px-1.5 py-0.5 text-caption2 font-medium",
+        recent
+          ? "bg-warning/15 text-warning"
+          : "bg-fill-secondary text-label-tertiary",
+      )}
+    >
+      {timeAgo(iso)}
+    </span>
+  );
+}
+
 export function ComposeForm({
   contacts,
   templates,
+  lastContacted,
   minDelay,
   jitter,
   dailyCap,
@@ -27,6 +64,7 @@ export function ComposeForm({
 }: {
   contacts: Contact[];
   templates: Template[];
+  lastContacted: Record<string, string>;
   minDelay: number;
   jitter: number;
   dailyCap: number;
@@ -177,16 +215,34 @@ export function ComposeForm({
     });
   };
 
+  const auto = templateId === AUTO;
+  const outreachTemplates = useMemo(
+    () => templates.filter((t) => /cold outreach/i.test(t.name)),
+    [templates],
+  );
+  // How many selected recipients were texted within the last RECENT_DAYS.
+  const recentSelected = useMemo(
+    () =>
+      [...selected].filter((id) => {
+        const d = daysSince(lastContacted[id]);
+        return d !== null && d < RECENT_DAYS;
+      }).length,
+    [selected, lastContacted],
+  );
+
   function applyTemplate(id: string) {
     setTemplateId(id);
+    if (id === AUTO || id === "") return; // auto / none: body unused or kept
     const t = templates.find((x) => x.id === id);
     if (t) setBody(t.body);
   }
 
   const send = () => {
-    if (count === 0 || !body.trim() || pending) return;
+    if (count === 0 || pending || (!auto && !body.trim())) return;
     start(async () => {
-      const res = await sendBulkNow([...selected], body);
+      const res = auto
+        ? await sendBulkAuto([...selected])
+        : await sendBulkNow([...selected], body);
       setResult(res);
       setSelected(new Set());
       router.refresh();
@@ -307,7 +363,10 @@ export function ComposeForm({
                       {on ? <Check className="h-3.5 w-3.5" /> : null}
                     </span>
                     <span className="pointer-events-none min-w-0 flex-1">
-                      <span className="block truncate text-subhead">{c.name}</span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate text-subhead">{c.name}</span>
+                        <LastPill iso={lastContacted[c.id]} />
+                      </span>
                       <span className="block truncate text-caption text-label-secondary">
                         {c.phone}
                         {c.company ? ` · ${c.company}` : ""}
@@ -325,55 +384,77 @@ export function ComposeForm({
       {/* ── Message ── */}
       <div className="space-y-4">
         <div className={card}>
-          {templates.length > 0 ? (
-            <div className="mb-3">
-              <label className="mb-1 block text-footnote font-medium text-label-secondary">
-                Template
-              </label>
-              <select
-                value={templateId}
-                onChange={(e) => applyTemplate(e.target.value)}
-                className="w-full rounded-control bg-fill px-3 py-2 text-subhead outline-none focus:bg-fill-secondary"
-              >
-                <option value="">None</option>
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : null}
-
-          <label className="mb-1 block text-footnote font-medium text-label-secondary">
-            Message
-          </label>
-          <p className="mb-2 text-caption text-label-secondary">
-            Tap to insert a detail that fills in per person:
-          </p>
-          <MergeFields onInsert={insert} />
-          <textarea
-            ref={taRef}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            rows={6}
-            placeholder="Type your message…"
-            className={cn(inputCls, "mt-2 resize-y")}
-          />
-          <div className="mt-1 text-caption text-label-secondary tabular-nums">
-            {body.length} characters
+          <div className="mb-3">
+            <label className="mb-1 block text-footnote font-medium text-label-secondary">
+              Outreach
+            </label>
+            <select
+              value={templateId}
+              onChange={(e) => applyTemplate(e.target.value)}
+              className="w-full rounded-control bg-fill px-3 py-2 text-subhead outline-none focus:bg-fill-secondary"
+            >
+              <option value="">None (write your own)</option>
+              <option value={AUTO}>✨ Auto — AI writes a unique opener per person</option>
+              {templates.length > 0 ? (
+                <optgroup label="Templates">
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+            </select>
           </div>
 
-          {firstSelected ? (
-            <div className="mt-3 rounded-control bg-fill p-3">
-              <div className="mb-1 text-caption2 font-medium uppercase tracking-wide text-label-secondary">
-                Preview → {firstSelected.name}
+          {auto ? (
+            <div className="rounded-control border border-accent/25 bg-accent/[0.05] p-3">
+              <div className="flex items-center gap-1.5 text-subhead font-medium text-accent">
+                <Sparkles className="h-4 w-4" /> AI writes each opener
               </div>
-              <div className="whitespace-pre-wrap text-callout">
-                {preview || "—"}
-              </div>
+              <p className="mt-1.5 text-caption text-label-secondary">
+                Every person gets a unique, on-message opener — written just
+                before it sends and anchored to{" "}
+                {outreachTemplates.length > 0
+                  ? outreachTemplates.map((t) => t.name).join(", ")
+                  : "your cold-outreach starters"}
+                , so no two texts are identical. If the AI can’t generate, it
+                falls back to a varied template. Never quotes rates or amounts.
+              </p>
             </div>
-          ) : null}
+          ) : (
+            <>
+              <label className="mb-1 block text-footnote font-medium text-label-secondary">
+                Message
+              </label>
+              <p className="mb-2 text-caption text-label-secondary">
+                Tap to insert a detail that fills in per person:
+              </p>
+              <MergeFields onInsert={insert} />
+              <textarea
+                ref={taRef}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                rows={6}
+                placeholder="Type your message…"
+                className={cn(inputCls, "mt-2 resize-y")}
+              />
+              <div className="mt-1 text-caption text-label-secondary tabular-nums">
+                {body.length} characters
+              </div>
+
+              {firstSelected ? (
+                <div className="mt-3 rounded-control bg-fill p-3">
+                  <div className="mb-1 text-caption2 font-medium uppercase tracking-wide text-label-secondary">
+                    Preview → {firstSelected.name}
+                  </div>
+                  <div className="whitespace-pre-wrap text-callout">
+                    {preview || "—"}
+                  </div>
+                </div>
+              ) : null}
+            </>
+          )}
         </div>
 
         <div className={card}>
@@ -389,6 +470,14 @@ export function ComposeForm({
               the rest will go out tomorrow.
             </p>
           ) : null}
+          {recentSelected > 0 ? (
+            <p className="mb-2 flex items-start gap-1.5 text-caption text-warning">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              {recentSelected} of {count} selected{" "}
+              {recentSelected === 1 ? "was" : "were"} contacted in the last{" "}
+              {RECENT_DAYS} days — double-check you’re not re-texting them.
+            </p>
+          ) : null}
           {result ? (
             <p className="mb-2 text-caption text-success">
               Queued {result.queued} message{result.queued === 1 ? "" : "s"}
@@ -400,17 +489,21 @@ export function ComposeForm({
           <button
             type="button"
             onClick={send}
-            disabled={count === 0 || !body.trim() || pending}
+            disabled={count === 0 || (!auto && !body.trim()) || pending}
             className="press inline-flex w-full items-center justify-center gap-2 rounded-control bg-accent px-6 py-3 text-body font-semibold text-white disabled:opacity-40"
           >
             {pending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
+            ) : auto ? (
+              <Sparkles className="h-4 w-4" />
             ) : (
               <Send className="h-4 w-4" />
             )}
             {count === 0
               ? "Select recipients"
-              : `Send to ${count} contact${count === 1 ? "" : "s"}`}
+              : auto
+                ? `AI-write & send to ${count} contact${count === 1 ? "" : "s"}`
+                : `Send to ${count} contact${count === 1 ? "" : "s"}`}
           </button>
         </div>
       </div>
