@@ -128,6 +128,7 @@ function StatCard({
   sub,
   tone,
   info,
+  href,
 }: {
   icon: LucideIcon;
   label: string;
@@ -135,6 +136,7 @@ function StatCard({
   sub: string;
   tone: "blue" | "red" | "neutral";
   info: string;
+  href?: string;
 }) {
   const toneCls =
     tone === "red"
@@ -142,9 +144,8 @@ function StatCard({
       : tone === "blue"
         ? "text-accent bg-accent/10"
         : "text-label-secondary bg-fill-tertiary";
-  return (
-    <motion.div variants={item} className={cn(cardBase, "relative p-5")}>
-      <InfoDot tip={info} />
+  const inner = (
+    <>
       <span
         className={cn(
           "mb-3 inline-flex h-8 w-8 items-center justify-center rounded-control",
@@ -156,6 +157,25 @@ function StatCard({
       <div className="text-h5 tabular-nums">{value}</div>
       <div className="text-footnote text-label-secondary">{label}</div>
       <div className="mt-0.5 text-caption text-label-secondary">{sub}</div>
+    </>
+  );
+  return (
+    <motion.div variants={item} className={cn(cardBase, "relative p-5")}>
+      {/* InfoDot stays a sibling (not inside the link) — it's a button, and a
+          button nested in an anchor is invalid. It paints on top via absolute
+          positioning, so it stays independently clickable. */}
+      <InfoDot tip={info} />
+      {href ? (
+        <Link
+          href={href}
+          aria-label={label}
+          className="-m-5 block rounded-card p-5 transition-colors duration-fast ease-ios hover:bg-fill-tertiary"
+        >
+          {inner}
+        </Link>
+      ) : (
+        inner
+      )}
     </motion.div>
   );
 }
@@ -333,6 +353,7 @@ export function Dashboard({
           tone="blue"
           sub="waiting to send"
           info="Messages waiting in line. They drip out automatically under your throttle settings — you don’t need to do anything."
+          href="/queue"
         />
         <StatCard
           icon={AlertTriangle}
