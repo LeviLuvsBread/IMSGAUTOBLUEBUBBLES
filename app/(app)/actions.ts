@@ -300,6 +300,49 @@ export async function setQueuePaused(paused: boolean) {
     .eq("id", true);
   revalidatePath("/");
   revalidatePath("/settings");
+  revalidatePath("/queue");
+}
+
+// Cancel every outbound message currently waiting in the send queue. Held AI
+// drafts (ai_pending_approval) are left alone — discard those from the inbox.
+// Soft-cancel (status 'canceled') keeps the history instead of deleting.
+export async function clearQueue(): Promise<{ canceled: number }> {
+  const { supabase } = await requireUser();
+  const { data } = await supabase
+    .from("messages")
+    .update({ status: "canceled", updated_at: new Date().toISOString() })
+    .eq("direction", "out")
+    .eq("status", "queued")
+    .eq("ai_pending_approval", false)
+    .select("id");
+  revalidatePath("/");
+  revalidatePath("/queue");
+  return { canceled: data?.length ?? 0 };
+}
+
+// Set the send order of the queue. `orderedIds` is top-first (index 0 sends
+// next). We stamp available_at one second apart, all in the recent past, so
+// claim_next_send (which orders by available_at) drains them in exactly this
+// order. The throttle gate still paces the actual sends ~2-3 min apart.
+export async function reorderQueue(orderedIds: string[]) {
+  const { supabase } = await requireUser();
+  const base = Date.now();
+  const n = orderedIds.length;
+  const stamp = new Date().toISOString();
+  await Promise.all(
+    orderedIds.map((id, i) =>
+      supabase
+        .from("messages")
+        .update({
+          available_at: new Date(base - (n - i) * 1000).toISOString(),
+          updated_at: stamp,
+        })
+        .eq("id", id)
+        .eq("direction", "out")
+        .eq("status", "queued"),
+    ),
+  );
+  revalidatePath("/queue");
 }
 
 // ---------------- AI responder: drafts + per-thread autopilot ----------------

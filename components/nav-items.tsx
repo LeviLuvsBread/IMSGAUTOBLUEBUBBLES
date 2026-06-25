@@ -6,6 +6,7 @@ import {
   FileText,
   Megaphone,
   Clock,
+  ListOrdered,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -26,5 +27,6 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/templates", label: "Templates", icon: FileText, key: "t" },
   { href: "/campaigns", label: "Campaigns", icon: Megaphone, key: "a" },
   { href: "/scheduler", label: "Scheduler", icon: Clock, key: "s" },
+  { href: "/queue", label: "Queue", icon: ListOrdered, key: "q" },
   { href: "/settings", label: "Settings", icon: Settings, key: "," },
 ];
