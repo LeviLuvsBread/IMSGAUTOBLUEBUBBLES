@@ -71,6 +71,11 @@ export default async function ContactsPage() {
                   {c.company ? ` · ${c.company}` : ""}
                   {c.tags.length ? ` · ${c.tags.join(", ")}` : ""}
                 </div>
+                {c.notes ? (
+                  <div className="mt-0.5 truncate text-caption2 text-label-secondary">
+                    {c.notes}
+                  </div>
+                ) : null}
                 {(() => {
                   const last = lastContacted[c.id];
                   const d = daysSince(last);
