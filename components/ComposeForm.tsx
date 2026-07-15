@@ -14,11 +14,13 @@ import {
   Search,
   Check,
   Users,
+  UserPlus,
   Loader2,
   Send,
   Clock,
   Sparkles,
   AlertTriangle,
+  RotateCcw,
 } from "lucide-react";
 import { sendBulkNow, sendBulkAuto } from "@/app/(app)/actions";
 import { renderForContact } from "@/lib/templating";
@@ -31,6 +33,8 @@ import type { Contact, Template } from "@/lib/types";
 const AUTO = "__auto__";
 // Selecting someone contacted within this many days flags a re-message warning.
 const RECENT_DAYS = 7;
+// Contacts created within this many days count as "recently added".
+const RECENT_ADDED_DAYS = 7;
 
 // "Last contacted" chip for a recipient row — amber if it was recent.
 function LastPill({ iso }: { iso?: string }) {
@@ -57,6 +61,7 @@ export function ComposeForm({
   contacts,
   templates,
   lastContacted,
+  lastBatch,
   minDelay,
   jitter,
   dailyCap,
@@ -65,6 +70,7 @@ export function ComposeForm({
   contacts: Contact[];
   templates: Template[];
   lastContacted: Record<string, string>;
+  lastBatch: string[];
   minDelay: number;
   jitter: number;
   dailyCap: number;
@@ -119,6 +125,47 @@ export function ComposeForm({
       return n;
     });
   const clearAll = () => setSelected(new Set());
+
+  // "Last recipients": one tap to (de)select everyone from your most recent
+  // send session. Toggles like Select-all — selects the batch, or clears it if
+  // it's already fully selected.
+  const lastBatchSelected =
+    lastBatch.length > 0 && lastBatch.every((id) => selected.has(id));
+  const toggleLastBatch = () =>
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (lastBatchSelected) lastBatch.forEach((id) => n.delete(id));
+      else lastBatch.forEach((id) => n.add(id));
+      return n;
+    });
+  // When that batch went out (anchor to the most recent one that actually sent).
+  const lastBatchIso = lastBatch
+    .map((id) => lastContacted[id])
+    .find(Boolean);
+
+  // "Recently added": one tap to (de)select every contact created in the last
+  // RECENT_ADDED_DAYS — the batch you just imported/added. Toggles like the
+  // last-recipients chip.
+  const recentlyAdded = useMemo(
+    () =>
+      contacts
+        .filter((c) => {
+          const d = daysSince(c.created_at);
+          return d !== null && d < RECENT_ADDED_DAYS;
+        })
+        .map((c) => c.id),
+    [contacts],
+  );
+  const recentlyAddedSet = useMemo(() => new Set(recentlyAdded), [recentlyAdded]);
+  const recentAddedSelected =
+    recentlyAdded.length > 0 && recentlyAdded.every((id) => selected.has(id));
+  const toggleRecentlyAdded = () =>
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (recentAddedSelected) recentlyAdded.forEach((id) => n.delete(id));
+      else recentlyAdded.forEach((id) => n.add(id));
+      return n;
+    });
 
   // Apple/Finder-style drag-to-select (mouse): press a row and sweep across
   // others. Touch taps a single row (so the list still scrolls). Shift-click
@@ -301,6 +348,53 @@ export function ComposeForm({
           ) : null}
         </div>
 
+        {lastBatch.length > 0 || recentlyAdded.length > 0 ? (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {lastBatch.length > 0 ? (
+              <button
+                type="button"
+                onClick={toggleLastBatch}
+                title="Select everyone from your most recent send"
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-footnote font-medium ring-1 transition-colors duration-fast ease-ios",
+                  lastBatchSelected
+                    ? "bg-accent text-white ring-accent"
+                    : "bg-fill-secondary text-label ring-hairline hover:bg-fill-tertiary",
+                )}
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                {lastBatchSelected ? "Clear last recipients" : "Last recipients"} (
+                {lastBatch.length})
+                {lastBatchIso ? (
+                  <span
+                    suppressHydrationWarning
+                    className={cn(lastBatchSelected ? "text-white/70" : "text-label-secondary")}
+                  >
+                    · {timeAgo(lastBatchIso)}
+                  </span>
+                ) : null}
+              </button>
+            ) : null}
+            {recentlyAdded.length > 0 ? (
+              <button
+                type="button"
+                onClick={toggleRecentlyAdded}
+                title={`Select every contact added in the last ${RECENT_ADDED_DAYS} days`}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-footnote font-medium ring-1 transition-colors duration-fast ease-ios",
+                  recentAddedSelected
+                    ? "bg-accent text-white ring-accent"
+                    : "bg-fill-secondary text-label ring-hairline hover:bg-fill-tertiary",
+                )}
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+                {recentAddedSelected ? "Clear recently added" : "Recently added"} (
+                {recentlyAdded.length})
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="mt-2 flex items-center justify-between text-footnote">
           <button
             type="button"
@@ -365,6 +459,11 @@ export function ComposeForm({
                     <span className="pointer-events-none min-w-0 flex-1">
                       <span className="flex items-center gap-1.5">
                         <span className="truncate text-subhead">{c.name}</span>
+                        {recentlyAddedSet.has(c.id) ? (
+                          <span className="shrink-0 rounded-full bg-success/15 px-1.5 py-0.5 text-caption2 font-medium text-success">
+                            new
+                          </span>
+                        ) : null}
                         <LastPill iso={lastContacted[c.id]} />
                       </span>
                       <span className="block truncate text-caption text-label-secondary">

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { ComposeForm } from "@/components/ComposeForm";
 import { lastContactedMap } from "@/lib/last-contacted";
+import { lastSentBatch } from "@/lib/last-batch";
 import type { Contact, Template } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -13,18 +14,27 @@ export default async function ComposePage({
 }) {
   const sp = await searchParams;
   const supabase = await createClient();
-  const [{ data: contacts }, { data: templates }, { data: settings }, lastContacted] =
-    await Promise.all([
-      supabase.from("contacts").select("*").eq("opted_out", false).order("name"),
-      supabase.from("templates").select("*").order("name"),
-      supabase
-        .from("app_settings")
-        .select("min_delay_seconds,jitter_seconds,daily_cap,sends_today")
-        .eq("id", true)
-        .maybeSingle(),
-      lastContactedMap(supabase),
-    ]);
+  const [
+    { data: contacts },
+    { data: templates },
+    { data: settings },
+    lastContacted,
+    rawBatch,
+  ] = await Promise.all([
+    supabase.from("contacts").select("*").eq("opted_out", false).order("name"),
+    supabase.from("templates").select("*").order("name"),
+    supabase
+      .from("app_settings")
+      .select("min_delay_seconds,jitter_seconds,daily_cap,sends_today")
+      .eq("id", true)
+      .maybeSingle(),
+    lastContactedMap(supabase),
+    lastSentBatch(supabase),
+  ]);
   const list = (contacts ?? []) as Contact[];
+  // Keep only recipients still available to select (drops opted-out / deleted).
+  const availableIds = new Set(list.map((c) => c.id));
+  const lastBatch = rawBatch.filter((id) => availableIds.has(id));
   const s = settings as {
     min_delay_seconds: number;
     jitter_seconds: number;
@@ -60,6 +70,7 @@ export default async function ComposePage({
           contacts={list}
           templates={(templates ?? []) as Template[]}
           lastContacted={lastContacted}
+          lastBatch={lastBatch}
           minDelay={s?.min_delay_seconds ?? 0}
           jitter={s?.jitter_seconds ?? 0}
           dailyCap={s?.daily_cap ?? 100}
