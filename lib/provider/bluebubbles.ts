@@ -1,6 +1,7 @@
 import type {
   HealthResult,
   MessageProvider,
+  ProviderAttachment,
   ProviderMessage,
   SendInput,
   SendResult,
@@ -109,9 +110,27 @@ export class BlueBubblesProvider implements MessageProvider {
     const d = (raw ?? {}) as Record<string, any>;
     const chats = Array.isArray(d.chats) ? d.chats : [];
     const handle = d.handle ?? (Array.isArray(d.handles) ? d.handles[0] : undefined);
+    const rawAtts = Array.isArray(d.attachments) ? d.attachments : [];
+    const attachments: ProviderAttachment[] = rawAtts
+      .filter((a: Record<string, any>) => a?.guid && !a?.hideAttachment)
+      .map((a: Record<string, any>) => ({
+        guid: String(a.guid),
+        mime: a.mimeType ?? a.mime_type ?? null,
+        name: a.transferName ?? a.transfer_name ?? null,
+        size:
+          typeof a.totalBytes === "number"
+            ? a.totalBytes
+            : typeof a.total_bytes === "number"
+              ? a.total_bytes
+              : null,
+        width: typeof a.width === "number" ? a.width : null,
+        height: typeof a.height === "number" ? a.height : null,
+      }));
     return {
       guid: d.guid,
-      text: d.text ?? "",
+      // U+FFFC is the invisible placeholder iMessage puts where an attachment
+      // sits in the text — strip it so attachment-only texts read as empty.
+      text: String(d.text ?? "").replace(/\uFFFC/g, ""),
       isFromMe: Boolean(d.isFromMe),
       chatGuid: chats[0]?.guid ?? d.chatGuid ?? "",
       handleAddress: handle?.address,
@@ -122,6 +141,7 @@ export class BlueBubblesProvider implements MessageProvider {
       tempGuid: d.tempGuid ?? undefined,
       errorCode: typeof d.error === "number" ? d.error : undefined,
       associatedMessageGuid: d.associatedMessageGuid ?? undefined,
+      attachments,
     };
   }
 

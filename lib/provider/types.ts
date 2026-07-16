@@ -21,6 +21,16 @@ export interface SendResult {
   error?: string;
 }
 
+// One attachment on a BlueBubbles message, normalized.
+export interface ProviderAttachment {
+  guid: string;
+  mime: string | null;
+  name: string | null;
+  size: number | null;
+  width?: number | null;
+  height?: number | null;
+}
+
 // Normalized form of a BlueBubbles "Message" object (from webhook or polling).
 export interface ProviderMessage {
   guid: string;
@@ -35,6 +45,7 @@ export interface ProviderMessage {
   tempGuid?: string; // present only if a future BB version echoes it
   errorCode?: number;
   associatedMessageGuid?: string;
+  attachments?: ProviderAttachment[];
 }
 
 export interface HealthResult {

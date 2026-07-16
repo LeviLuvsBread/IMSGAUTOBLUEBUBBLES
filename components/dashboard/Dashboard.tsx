@@ -22,6 +22,7 @@ import {
 import { cn } from "@/lib/cn";
 import { Tooltip } from "@/components/Tooltip";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
+import { OptOutButton } from "@/components/OptOutButton";
 
 type Reply = { id: string; chatGuid: string; body: string };
 type Failed = { id: string; chatGuid: string; body: string; error: string | null };
@@ -412,10 +413,10 @@ export function Dashboard({
           </h2>
           <ul>
             {handovers.map((h) => (
-              <li key={h.chatGuid}>
+              <li key={h.chatGuid} className="flex items-center gap-1.5 pr-2">
                 <Link
                   href={`/inbox/${encodeURIComponent(h.chatGuid)}`}
-                  className="flex items-center gap-3 rounded-row px-3 py-2 transition-colors duration-fast ease-ios hover:bg-fill-tertiary"
+                  className="flex min-w-0 flex-1 items-center gap-3 rounded-row px-3 py-2 transition-colors duration-fast ease-ios hover:bg-fill-tertiary"
                 >
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-caption font-semibold text-accent">
                     {initials(h.name || h.chatGuid)}
@@ -430,6 +431,7 @@ export function Dashboard({
                   </span>
                   <ChevronRight className="h-4 w-4 shrink-0 text-label-tertiary" />
                 </Link>
+                <OptOutButton chatGuid={h.chatGuid} name={h.name} small />
               </li>
             ))}
           </ul>

@@ -10,6 +10,7 @@ import { STARTER_TEMPLATES } from "@/lib/starter-templates";
 import { TEST_CHAT_GUID } from "@/lib/test-contact";
 import { toE164, chatGuidForPhone } from "@/lib/chat";
 import { runPump } from "@/lib/queue/pump";
+import { applyOptOut } from "@/lib/queue/opt-out";
 import type { Contact, Segment } from "@/lib/types";
 
 async function requireUser() {
@@ -90,6 +91,54 @@ export async function toggleOptOut(formData: FormData) {
   const optedOut = formData.get("opted_out") === "true";
   if (id) await supabase.from("contacts").update({ opted_out: optedOut }).eq("id", id);
   revalidatePath("/contacts");
+}
+
+// Manual hard opt-out for a whole thread — the "this is not actually a lead"
+// button on handover/escalation surfaces. Flags the contact (stays marked on
+// the Contacts page), cancels queued sends, stops sequences, and closes the
+// conversation so it leaves the handover list and the AI never re-engages.
+export async function optOutThread(formData: FormData) {
+  const { supabase, userId } = await requireUser();
+  const chatGuid = String(formData.get("chat_guid") ?? "").trim();
+  if (!chatGuid) return;
+  const { data: contact } = await supabase
+    .from("contacts")
+    .select("id")
+    .eq("chat_guid", chatGuid)
+    .maybeSingle();
+  await applyOptOut(supabase, userId, chatGuid, contact?.id ?? null);
+  revalidatePath("/");
+  revalidatePath("/inbox");
+  revalidatePath(`/inbox/${encodeURIComponent(chatGuid)}`);
+  revalidatePath("/contacts");
+}
+
+// Bulk hard opt-out — the inbox multi-select. Same routine as optOutThread,
+// applied to every selected thread.
+export async function optOutThreads(
+  items: { chatGuid: string; contactId: string | null }[],
+): Promise<{ optedOut: number }> {
+  const { supabase, userId } = await requireUser();
+  const list = Array.isArray(items)
+    ? items.filter((i) => i && typeof i.chatGuid === "string" && i.chatGuid)
+    : [];
+  for (const it of list) {
+    let contactId = it.contactId ?? null;
+    if (!contactId) {
+      const { data: c } = await supabase
+        .from("contacts")
+        .select("id")
+        .eq("chat_guid", it.chatGuid)
+        .maybeSingle();
+      contactId = c?.id ?? null;
+    }
+    await applyOptOut(supabase, userId, it.chatGuid, contactId);
+  }
+  revalidatePath("/");
+  revalidatePath("/inbox");
+  revalidatePath("/contacts");
+  revalidatePath("/queue");
+  return { optedOut: list.length };
 }
 
 export type ImportRow = {

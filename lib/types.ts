@@ -37,6 +37,17 @@ export interface Template {
   updated_at: string;
 }
 
+// One file attached to a message (photo, video, PDF, …), as captured from the
+// BlueBubbles webhook. Bytes are streamed on demand via /api/attachment/[guid].
+export interface MessageAttachment {
+  guid: string;
+  mime: string | null;
+  name: string | null; // original filename ("IMG_0123.heic")
+  size: number | null; // bytes
+  width?: number | null;
+  height?: number | null;
+}
+
 export interface Message {
   id: string;
   owner_id: string;
@@ -46,6 +57,7 @@ export interface Message {
   body: string;
   status: MessageStatus;
   source: string;
+  attachments?: MessageAttachment[] | null;
   campaign_id: string | null;
   scheduled_send_id: string | null;
   bb_temp_guid: string | null;

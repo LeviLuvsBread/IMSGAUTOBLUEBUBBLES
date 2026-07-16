@@ -4,6 +4,7 @@ import type { ProviderMessage } from "@/lib/provider/types";
 import type { Message, MessageStatus } from "@/lib/types";
 import { addressFromChatGuid, toE164 } from "@/lib/chat";
 import { isOptOut } from "@/lib/ai/guardrails";
+import { applyOptOut } from "@/lib/queue/opt-out";
 
 const RANK: Record<MessageStatus, number> = {
   queued: 0,
@@ -146,22 +147,39 @@ export async function recordInbound(
     contactId = contact?.id ?? null;
   }
 
-  const { data: insertedRow, error } = await admin
+  const baseRow: Record<string, unknown> = {
+    owner_id: ownerId,
+    contact_id: contactId,
+    chat_guid: msg.chatGuid,
+    direction: "in",
+    body: msg.text,
+    status: "received",
+    source: "reply",
+    bb_message_guid: msg.guid ?? null,
+    bb_date_created: msg.dateCreated ?? new Date().toISOString(),
+    associated_guid: msg.associatedMessageGuid ?? null,
+  };
+  const atts = msg.attachments ?? [];
+
+  let { data: insertedRow, error } = await admin
     .from("messages")
-    .insert({
-      owner_id: ownerId,
-      contact_id: contactId,
-      chat_guid: msg.chatGuid,
-      direction: "in",
-      body: msg.text,
-      status: "received",
-      source: "reply",
-      bb_message_guid: msg.guid ?? null,
-      bb_date_created: msg.dateCreated ?? new Date().toISOString(),
-      associated_guid: msg.associatedMessageGuid ?? null,
-    })
+    .insert(atts.length ? { ...baseRow, attachments: atts } : baseRow)
     .select("id")
     .single();
+  // If the attachments column hasn't been migrated yet, store without it
+  // rather than dropping the message (PGRST204 = unknown column via PostgREST,
+  // 42703 = undefined column straight from Postgres).
+  if (
+    error &&
+    atts.length &&
+    ["PGRST204", "42703"].includes((error as { code?: string }).code ?? "")
+  ) {
+    ({ data: insertedRow, error } = await admin
+      .from("messages")
+      .insert(baseRow)
+      .select("id")
+      .single());
+  }
   if (error) {
     // Unique violation on bb_message_guid → a concurrent insert won; treat as ok.
     if ((error as { code?: string }).code === "23505") return { inserted: false };
@@ -189,67 +207,6 @@ export async function recordInbound(
   await flagNeedsReply(admin, ownerId, msg.chatGuid, contactId, insertedRow?.id ?? null);
 
   return { inserted: true };
-}
-
-// Hard opt-out: mark the contact, cancel anything queued to them, stop every
-// sequence, and park the conversation as opted_out so the AI never replies.
-async function applyOptOut(
-  admin: SupabaseClient,
-  ownerId: string,
-  chatGuid: string,
-  contactId: string | null,
-): Promise<void> {
-  const now = new Date().toISOString();
-
-  // Never message this number again.
-  if (contactId) {
-    await admin
-      .from("contacts")
-      .update({ opted_out: true, updated_at: now })
-      .eq("id", contactId);
-  }
-
-  // Kill anything still sitting in the send queue for this thread.
-  await admin
-    .from("messages")
-    .update({ status: "canceled" })
-    .eq("owner_id", ownerId)
-    .eq("chat_guid", chatGuid)
-    .eq("direction", "out")
-    .eq("status", "queued");
-
-  // Stop ALL active sequences for this chat (regardless of stop_on_reply).
-  await admin
-    .from("sequence_enrollments")
-    .update({ status: "stopped" })
-    .eq("owner_id", ownerId)
-    .eq("chat_guid", chatGuid)
-    .eq("status", "active");
-
-  // Park the conversation as opted_out — and crucially do NOT set needs_reply,
-  // so the AI cron never picks it up.
-  const { data: existing } = await admin
-    .from("conversation_state")
-    .select("chat_guid")
-    .eq("owner_id", ownerId)
-    .eq("chat_guid", chatGuid)
-    .maybeSingle();
-
-  if (existing) {
-    await admin
-      .from("conversation_state")
-      .update({ status: "opted_out", ai_autopilot: false, updated_at: now })
-      .eq("owner_id", ownerId)
-      .eq("chat_guid", chatGuid);
-  } else {
-    await admin.from("conversation_state").insert({
-      owner_id: ownerId,
-      chat_guid: chatGuid,
-      contact_id: contactId,
-      status: "opted_out",
-      ai_autopilot: false,
-    });
-  }
 }
 
 // Mark a thread as needing an AI reply. Skips threads the human already owns

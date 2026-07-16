@@ -3,6 +3,7 @@ import { ChevronLeft, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { MessageThread } from "@/components/MessageThread";
 import { ThreadAiBar } from "@/components/ThreadAiBar";
+import { OptOutButton } from "@/components/OptOutButton";
 import { addressFromChatGuid } from "@/lib/chat";
 import { sendNow } from "../../actions";
 import { TEST_CHAT_GUID } from "@/lib/test-contact";
@@ -64,10 +65,13 @@ export default async function ThreadPage({
       {cs &&
       (cs.lifecycle_stage === "ready_for_handover" || cs.status === "escalated") ? (
         <div className="mb-2 rounded-card border border-warning/30 bg-warning/[0.06] p-3">
-          <p className="flex items-center gap-1.5 text-caption2 font-semibold uppercase tracking-wide text-warning">
-            <Sparkles className="h-3 w-3" />
-            {cs.status === "escalated" ? "Needs you" : "Ready for handover"}
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-caption2 font-semibold uppercase tracking-wide text-warning">
+              <Sparkles className="h-3 w-3" />
+              {cs.status === "escalated" ? "Needs you" : "Ready for handover"}
+            </p>
+            <OptOutButton chatGuid={chatGuid} name={contact?.name} />
+          </div>
           {cs.handover_summary ? (
             <p className="mt-1 text-subhead text-label">{cs.handover_summary}</p>
           ) : null}

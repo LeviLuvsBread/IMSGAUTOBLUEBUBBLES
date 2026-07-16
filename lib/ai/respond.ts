@@ -10,6 +10,7 @@ import type {
   Message,
 } from "@/lib/types";
 import { enqueueMessage } from "@/lib/queue/enqueue";
+import { applyOptOut } from "@/lib/queue/opt-out";
 import { isOptOut, needsHuman } from "./guardrails";
 import { runPipeline, type ConvoTurn, type PipelineContext } from "./pipeline";
 import { evaluateLifecycle } from "./lifecycle";
@@ -149,13 +150,10 @@ export async function runConversationTurn(
     }
   }
 
-  // Deterministic opt-out pre-gate (TCPA: no reply after STOP).
+  // Deterministic opt-out pre-gate (TCPA: no reply after STOP). Full hard
+  // opt-out: contact flag + queued sends canceled + sequences stopped.
   if (isOptOut(latestInboundText)) {
-    if (cs.contact_id)
-      await admin
-        .from("contacts")
-        .update({ opted_out: true, updated_at: nowIso() })
-        .eq("id", cs.contact_id);
+    await applyOptOut(admin, ownerId, chatGuid, cs.contact_id ?? null);
     await patchState(admin, ownerId, chatGuid, {
       status: "opted_out",
       ai_autopilot: false,
@@ -248,13 +246,10 @@ export async function runConversationTurn(
   if (life.qualification_updates)
     Object.assign(qualification, life.qualification_updates);
 
-  // Opt-out surfaced by the pipeline.
+  // Opt-out surfaced by the pipeline. Same full hard opt-out as the pre-gate
+  // (also cancels queued sends and stops sequences for this thread).
   if (result.outcome === "opted_out") {
-    if (cs.contact_id)
-      await admin
-        .from("contacts")
-        .update({ opted_out: true, updated_at: nowIso() })
-        .eq("id", cs.contact_id);
+    await applyOptOut(admin, ownerId, chatGuid, cs.contact_id ?? null);
     await patchState(admin, ownerId, chatGuid, {
       status: "opted_out",
       ai_autopilot: false,

@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import { Download, FileText } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
+import { fmtBytes } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { AiDraftCard } from "@/components/AiDraftCard";
-import type { Message, MessageStatus } from "@/lib/types";
+import type { Message, MessageAttachment, MessageStatus } from "@/lib/types";
 
 function byCreated(a: Message, b: Message) {
   return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
@@ -43,6 +45,88 @@ function fmtTime(iso: string): string {
 
 const GROUP_GAP = 5 * 60 * 1000; // new visual group after a 5-min gap
 const TIME_GAP = 60 * 60 * 1000; // show a time separator after a 1-hr gap
+
+// One attachment bubble: images/videos render inline, audio gets a player,
+// everything else is a file chip. All of them offer a download.
+function AttachmentView({ a }: { a: MessageAttachment }) {
+  const src = `/api/attachment/${encodeURIComponent(a.guid)}`;
+  const dl = `${src}?download=1${a.name ? `&name=${encodeURIComponent(a.name)}` : ""}`;
+  const mime = a.mime ?? "";
+
+  if (mime.startsWith("image/")) {
+    return (
+      <div className="group relative w-fit overflow-hidden rounded-[18px]">
+        <a href={src} target="_blank" rel="noreferrer" title={a.name ?? "Open image"}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={src}
+            alt={a.name ?? "Image"}
+            loading="lazy"
+            className="max-h-72 max-w-full rounded-[18px] bg-fill object-cover"
+          />
+        </a>
+        <a
+          href={dl}
+          aria-label="Download image"
+          title="Download"
+          className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white opacity-0 backdrop-blur-sm transition-opacity duration-fast ease-ios group-hover:opacity-100"
+        >
+          <Download className="h-4 w-4" />
+        </a>
+      </div>
+    );
+  }
+
+  if (mime.startsWith("video/")) {
+    return (
+      <div className="w-fit space-y-1">
+        <video src={src} controls preload="metadata" className="max-h-72 max-w-full rounded-[18px] bg-black/80" />
+        <a
+          href={dl}
+          className="inline-flex items-center gap-1 px-1 text-caption text-accent hover:underline"
+        >
+          <Download className="h-3 w-3" /> Download{a.size ? ` · ${fmtBytes(a.size)}` : ""}
+        </a>
+      </div>
+    );
+  }
+
+  if (mime.startsWith("audio/")) {
+    return (
+      <div className="w-fit space-y-1">
+        <audio src={src} controls preload="metadata" className="max-w-full" />
+        <a
+          href={dl}
+          className="inline-flex items-center gap-1 px-1 text-caption text-accent hover:underline"
+        >
+          <Download className="h-3 w-3" /> Download{a.size ? ` · ${fmtBytes(a.size)}` : ""}
+        </a>
+      </div>
+    );
+  }
+
+  // Generic file (PDF, docs, zips, …): a chip that downloads on tap.
+  return (
+    <a
+      href={dl}
+      title="Download file"
+      className="flex w-fit max-w-full items-center gap-2.5 rounded-[18px] bg-bubble-received px-3.5 py-2.5 text-label transition-opacity duration-fast ease-ios hover:opacity-80"
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent">
+        <FileText className="h-4.5 w-4.5" />
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-subhead font-medium">
+          {a.name ?? "Attachment"}
+        </span>
+        <span className="block text-caption text-label-secondary">
+          {[mime || "file", fmtBytes(a.size)].filter(Boolean).join(" · ")}
+        </span>
+      </span>
+      <Download className="ml-1 h-4 w-4 shrink-0 text-label-secondary" />
+    </a>
+  );
+}
 
 type Row =
   | { type: "time"; key: string; t: string }
@@ -174,6 +258,10 @@ export function MessageThread({
         const failed = m.status === "failed";
         const isAi = out && m.ai_generated;
         const showReceipt = out && (failed || m.id === lastOutId);
+        const atts = m.attachments ?? [];
+        // Strip the invisible attachment placeholder so attachment-only
+        // messages don't render an empty text bubble.
+        const bodyText = (m.body ?? "").replace(/\uFFFC/g, "");
         return (
           <div
             key={m.id}
@@ -189,22 +277,40 @@ export function MessageThread({
                 out ? "items-end" : "items-start",
               )}
             >
-              <motion.div
-                initial={{ opacity: 0, y: 6, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ type: "spring", stiffness: 500, damping: 34 }}
-                className={cn(
-                  "w-fit whitespace-pre-wrap break-words rounded-[20px] px-3.5 py-2 text-callout",
-                  out
-                    ? failed
-                      ? "bg-danger text-white"
-                      : "bg-accent text-white"
-                    : "bg-bubble-received text-label",
-                  lastInGroup && (out ? "rounded-br-md" : "rounded-bl-md"),
-                )}
-              >
-                {m.body}
-              </motion.div>
+              {atts.length > 0 ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 34 }}
+                  className={cn(
+                    "flex flex-col gap-1",
+                    out ? "items-end" : "items-start",
+                    bodyText.trim() && "mb-1",
+                  )}
+                >
+                  {atts.map((a) => (
+                    <AttachmentView key={a.guid} a={a} />
+                  ))}
+                </motion.div>
+              ) : null}
+              {bodyText.trim() ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 34 }}
+                  className={cn(
+                    "w-fit whitespace-pre-wrap break-words rounded-[20px] px-3.5 py-2 text-callout",
+                    out
+                      ? failed
+                        ? "bg-danger text-white"
+                        : "bg-accent text-white"
+                      : "bg-bubble-received text-label",
+                    lastInGroup && (out ? "rounded-br-md" : "rounded-bl-md"),
+                  )}
+                >
+                  {bodyText}
+                </motion.div>
+              ) : null}
               {showReceipt || isAi ? (
                 <span
                   className={cn(
