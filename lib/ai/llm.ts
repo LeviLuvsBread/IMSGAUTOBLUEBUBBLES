@@ -5,9 +5,14 @@ import "server-only";
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+// OpenAI-style content parts — lets a user message carry images (vision).
+export type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
-  content: string;
+  content: string | ContentPart[];
 };
 
 export type LlmResult = { text: string; tokens: number };

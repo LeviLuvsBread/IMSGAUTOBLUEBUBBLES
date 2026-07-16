@@ -1,5 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+export interface EnqueueAttachment {
+  storage_path: string; // path in the private uploads bucket
+  name: string | null;
+  mime: string | null;
+  size: number | null;
+}
+
 export interface EnqueueInput {
   ownerId: string;
   chatGuid: string;
@@ -11,10 +18,11 @@ export interface EnqueueInput {
   availableAt?: string; // ISO; defaults to now
   aiGenerated?: boolean; // produced by the AI pipeline
   aiPendingApproval?: boolean; // held draft — claim_next_send won't send until approved
+  attachments?: EnqueueAttachment[]; // files to send (pump streams from storage)
 }
 
 function toRow(input: EnqueueInput) {
-  return {
+  const row: Record<string, unknown> = {
     owner_id: input.ownerId,
     contact_id: input.contactId ?? null,
     chat_guid: input.chatGuid,
@@ -29,6 +37,8 @@ function toRow(input: EnqueueInput) {
     ai_generated: input.aiGenerated ?? false,
     ai_pending_approval: input.aiPendingApproval ?? false,
   };
+  if (input.attachments?.length) row.attachments = input.attachments;
+  return row;
 }
 
 // Enqueue a single outbound message (status 'queued'). The cron pump drips it

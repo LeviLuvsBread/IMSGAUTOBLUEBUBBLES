@@ -1,4 +1,5 @@
 import type {
+  AttachmentSendInput,
   HealthResult,
   MessageProvider,
   ProviderAttachment,
@@ -76,6 +77,58 @@ export class BlueBubblesProvider implements MessageProvider {
       // Abort/timeout/network error. The AppleScript send routinely succeeds
       // even when the HTTP call never returns, so treat this as an OPTIMISTIC
       // submit (ok:true, not hardFail). Delivery is confirmed later by webhook.
+      const isAbort = e instanceof Error && e.name === "AbortError";
+      return {
+        ok: true,
+        acceptedAt,
+        error: isAbort ? "timeout-optimistic" : `network: ${String(e)}`,
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // Multipart file send. Attachments upload + AppleScript-send slower than
+  // text, so the timeout is generous; like sendMessage, an abort/network error
+  // is treated as an optimistic submit (webhook confirms real delivery).
+  async sendAttachment({
+    chatGuid,
+    tempGuid,
+    name,
+    mime,
+    data,
+  }: AttachmentSendInput): Promise<SendResult> {
+    const acceptedAt = new Date().toISOString();
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 45_000);
+    try {
+      const form = new FormData();
+      form.set("chatGuid", chatGuid);
+      form.set("tempGuid", tempGuid);
+      form.set("name", name);
+      form.set("method", "apple-script");
+      form.set("attachment", new Blob([data], { type: mime }), name);
+      const res = await fetch(this.url("api/v1/message/attachment"), {
+        method: "POST",
+        headers: { "ngrok-skip-browser-warning": "true" },
+        body: form,
+        signal: ctrl.signal,
+      });
+      if (!res.ok) {
+        const hardFail = HARD_FAIL_STATUSES.has(res.status);
+        let detail = `HTTP ${res.status}`;
+        try {
+          const j = await res.json();
+          if (j?.error?.message) detail += `: ${j.error.message}`;
+          else if (j?.message) detail += `: ${j.message}`;
+        } catch {
+          /* ignore body parse errors */
+        }
+        return { ok: false, acceptedAt, hardFail, error: detail };
+      }
+      const json = await res.json().catch(() => ({}));
+      return { ok: true, acceptedAt, providerMessageGuid: json?.data?.guid };
+    } catch (e) {
       const isAbort = e instanceof Error && e.name === "AbortError";
       return {
         ok: true,

@@ -8,6 +8,7 @@ import { enqueueMessage, enqueueBulk, type EnqueueInput } from "@/lib/queue/enqu
 import { chatGuidForPhone } from "@/lib/chat";
 import { generateOpener, type OpenerContext } from "@/lib/ai/generate-opener";
 import { STARTER_TEMPLATES } from "@/lib/starter-templates";
+import { UPLOAD_BUCKET } from "@/lib/storage";
 import type { Contact, Message } from "@/lib/types";
 
 export interface PumpResult {
@@ -103,11 +104,48 @@ export async function runPump(maxBatch = 10): Promise<PumpResult> {
       }
     }
 
-    const res = await provider.sendMessage({
-      chatGuid: row.chat_guid,
-      message: body,
-      tempGuid: row.bb_temp_guid ?? crypto.randomUUID(),
-    });
+    // Outbound files: stream each stored attachment to BlueBubbles, then send
+    // any caption text. Fails the row if an attachment can't be fetched/sent.
+    const stored = (row.attachments ?? []).filter((a) => a.storage_path);
+    let res;
+    if (stored.length > 0) {
+      res = { ok: true } as Awaited<ReturnType<typeof provider.sendMessage>>;
+      for (const [ai, att] of stored.entries()) {
+        const { data: blob, error: dlErr } = await admin.storage
+          .from(UPLOAD_BUCKET)
+          .download(att.storage_path!);
+        if (dlErr || !blob) {
+          res = {
+            ok: false,
+            acceptedAt: nowIso(),
+            hardFail: true,
+            error: `attachment missing from storage: ${att.storage_path}`,
+          };
+          break;
+        }
+        res = await provider.sendAttachment({
+          chatGuid: row.chat_guid,
+          tempGuid: `${row.bb_temp_guid ?? row.id}-att${ai}`,
+          name: att.name ?? "file",
+          mime: att.mime ?? "application/octet-stream",
+          data: await blob.arrayBuffer(),
+        });
+        if (!res.ok) break;
+      }
+      if (res.ok && body.trim()) {
+        res = await provider.sendMessage({
+          chatGuid: row.chat_guid,
+          message: body,
+          tempGuid: row.bb_temp_guid ?? crypto.randomUUID(),
+        });
+      }
+    } else {
+      res = await provider.sendMessage({
+        chatGuid: row.chat_guid,
+        message: body,
+        tempGuid: row.bb_temp_guid ?? crypto.randomUUID(),
+      });
+    }
 
     if (res.ok) {
       await admin

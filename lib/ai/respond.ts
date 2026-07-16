@@ -8,12 +8,32 @@ import type {
   ConversationState,
   LifecycleStage,
   Message,
+  MessageAttachment,
 } from "@/lib/types";
 import { enqueueMessage } from "@/lib/queue/enqueue";
 import { applyOptOut } from "@/lib/queue/opt-out";
 import { isOptOut, needsHuman } from "./guardrails";
 import { runPipeline, type ConvoTurn, type PipelineContext } from "./pipeline";
 import { evaluateLifecycle } from "./lifecycle";
+import { fetchInboundImages } from "./images";
+
+// "[sent a photo]" / "[sent 2 photos and a file (statement.pdf)]" — lets the
+// AI know an attachment arrived even though it only reads text.
+function attachmentNote(atts: MessageAttachment[] | null | undefined): string {
+  const list = atts ?? [];
+  if (list.length === 0) return "";
+  const imgs = list.filter((a) => (a.mime ?? "").startsWith("image/"));
+  const files = list.filter((a) => !(a.mime ?? "").startsWith("image/"));
+  const parts: string[] = [];
+  if (imgs.length) parts.push(imgs.length === 1 ? "a photo" : `${imgs.length} photos`);
+  if (files.length)
+    parts.push(
+      files.length === 1
+        ? `a file${files[0].name ? ` (${files[0].name})` : ""}`
+        : `${files.length} files`,
+    );
+  return `[sent ${parts.join(" and ")}]`;
+}
 
 // Used until the owner sets their own in Settings → AI. Goal: text like a human.
 const DEFAULT_PERSONA = `You are a friendly, sharp funding specialist who helps small business owners get working capital. You're texting merchants you've been in contact with before. You talk like a real person over text — casual, warm, concise, never salesy or robotic. Your job is to re-warm the relationship, find out if they need capital right now, and keep them talking. You do NOT close deals or quote numbers — a human takes over for that.`;
@@ -111,8 +131,11 @@ export async function runConversationTurn(
 
   const convo: ConvoTurn[] = [];
   for (const m of all) {
-    if (m.direction === "in") convo.push({ role: "merchant", text: m.body });
-    else if (
+    if (m.direction === "in") {
+      const body = (m.body ?? "").replace(/\uFFFC/g, "").trim();
+      const note = attachmentNote(m.attachments);
+      convo.push({ role: "merchant", text: [body, note].filter(Boolean).join(" ") });
+    } else if (
       m.direction === "out" &&
       !m.ai_pending_approval &&
       (m.status === "sent" || m.status === "delivered" || m.status === "read")
@@ -228,6 +251,10 @@ export async function runConversationTurn(
     return { outcome: "no_stages" };
   }
 
+  // Vision: pull the latest inbound photos so the AI can actually see them
+  // (best-effort — failures just mean a text-only turn).
+  const images = await fetchInboundImages(lastInbound?.attachments);
+
   const ctx: PipelineContext = {
     conversation: convo.slice(-HISTORY_LIMIT),
     contact,
@@ -236,6 +263,7 @@ export async function runConversationTurn(
     persona: s.ai_persona?.trim() || DEFAULT_PERSONA,
     knowledge: s.ai_knowledge?.trim() || DEFAULT_KNOWLEDGE,
     analyses: [],
+    images,
   };
 
   const result = await runPipeline(ctx, stages);

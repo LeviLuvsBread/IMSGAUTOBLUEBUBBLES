@@ -37,10 +37,13 @@ export interface Template {
   updated_at: string;
 }
 
-// One file attached to a message (photo, video, PDF, …), as captured from the
-// BlueBubbles webhook. Bytes are streamed on demand via /api/attachment/[guid].
+// One file attached to a message (photo, video, PDF, …). Inbound attachments
+// come from the BlueBubbles webhook and carry a `guid` (bytes streamed via
+// /api/attachment/[guid]); outbound uploads carry a `storage_path` in the
+// private uploads bucket (bytes streamed via /api/file?path=…).
 export interface MessageAttachment {
-  guid: string;
+  guid?: string | null;
+  storage_path?: string | null;
   mime: string | null;
   name: string | null; // original filename ("IMG_0123.heic")
   size: number | null; // bytes

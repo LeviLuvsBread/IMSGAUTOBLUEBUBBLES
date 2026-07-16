@@ -47,10 +47,14 @@ const GROUP_GAP = 5 * 60 * 1000; // new visual group after a 5-min gap
 const TIME_GAP = 60 * 60 * 1000; // show a time separator after a 1-hr gap
 
 // One attachment bubble: images/videos render inline, audio gets a player,
-// everything else is a file chip. All of them offer a download.
+// everything else is a file chip. All of them offer a download. Inbound files
+// stream from BlueBubbles (guid); outbound uploads stream from storage (path).
 function AttachmentView({ a }: { a: MessageAttachment }) {
-  const src = `/api/attachment/${encodeURIComponent(a.guid)}`;
-  const dl = `${src}?download=1${a.name ? `&name=${encodeURIComponent(a.name)}` : ""}`;
+  const src = a.guid
+    ? `/api/attachment/${encodeURIComponent(a.guid)}`
+    : `/api/file?path=${encodeURIComponent(a.storage_path ?? "")}`;
+  const sep = src.includes("?") ? "&" : "?";
+  const dl = `${src}${sep}download=1${a.name ? `&name=${encodeURIComponent(a.name)}` : ""}`;
   const mime = a.mime ?? "";
 
   if (mime.startsWith("image/")) {
@@ -288,8 +292,8 @@ export function MessageThread({
                     bodyText.trim() && "mb-1",
                   )}
                 >
-                  {atts.map((a) => (
-                    <AttachmentView key={a.guid} a={a} />
+                  {atts.map((a, ai) => (
+                    <AttachmentView key={a.guid ?? a.storage_path ?? ai} a={a} />
                   ))}
                 </motion.div>
               ) : null}

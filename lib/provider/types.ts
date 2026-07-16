@@ -55,9 +55,19 @@ export interface HealthResult {
   error?: string;
 }
 
+export interface AttachmentSendInput {
+  chatGuid: string;
+  tempGuid: string;
+  name: string; // filename shown to the recipient
+  mime: string;
+  data: ArrayBuffer;
+}
+
 export interface MessageProvider {
   /** Fire-and-forget with a short timeout. Never blocks on AppleScript. */
   sendMessage(input: SendInput): Promise<SendResult>;
+  /** Send a file (photo/PDF/…) to a chat via multipart upload. */
+  sendAttachment(input: AttachmentSendInput): Promise<SendResult>;
   /** Read recent messages in a chat (reconciliation / backfill). */
   getChatMessages(
     chatGuid: string,

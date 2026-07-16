@@ -1,6 +1,6 @@
 import "server-only";
 import type { AiStage, AiRunStage, AiRunOutcome } from "@/lib/types";
-import { callOpenRouter, parseJsonLoose } from "./llm";
+import { callOpenRouter, parseJsonLoose, type ChatMessage } from "./llm";
 import { looksRisky } from "./guardrails";
 
 export type Verdict =
@@ -35,6 +35,8 @@ export interface PipelineContext {
   knowledge: string;
   candidateDraft?: string;
   analyses: { stage: string; analysis: string }[];
+  /** Data URLs of the latest inbound photos — shown to vision-capable models. */
+  images?: string[];
 }
 
 export interface PipelineResult {
@@ -104,17 +106,47 @@ async function runStage(
   trace: AiRunStage[],
 ): Promise<StageOutput> {
   const t0 = Date.now();
-  const messages = [
-    { role: "system" as const, content: buildSystem(stage, ctx) },
-    { role: "user" as const, content: serializeContext(ctx) },
+  const userText =
+    serializeContext(ctx) +
+    (ctx.images?.length
+      ? "\n\n(The merchant's latest photo(s) are attached for you to look at.)"
+      : "");
+  // Attach the merchant's photos for vision-capable models; if the configured
+  // model rejects the multimodal payload we retry text-only below.
+  const system: ChatMessage = { role: "system", content: buildSystem(stage, ctx) };
+  const messages: ChatMessage[] = [
+    system,
+    {
+      role: "user",
+      content: ctx.images?.length
+        ? [
+            { type: "text", text: userText },
+            ...ctx.images.map((u) => ({
+              type: "image_url" as const,
+              image_url: { url: u },
+            })),
+          ]
+        : userText,
+    },
   ];
+  const textOnly: ChatMessage[] = [system, { role: "user", content: userText }];
   let out: StageOutput | null = null;
   let tokens = 0;
   try {
-    const r = await callOpenRouter(stage.model, messages, {
-      json: true,
-      temperature: tempForKind(stage.kind),
-    });
+    let r;
+    try {
+      r = await callOpenRouter(stage.model, messages, {
+        json: true,
+        temperature: tempForKind(stage.kind),
+      });
+    } catch (e) {
+      if (!ctx.images?.length) throw e;
+      // Model likely can't take images — run the stage without them.
+      r = await callOpenRouter(stage.model, textOnly, {
+        json: true,
+        temperature: tempForKind(stage.kind),
+      });
+    }
     tokens += r.tokens;
     out = parseJsonLoose<StageOutput>(r.text);
     if (!out || !out.verdict) {
