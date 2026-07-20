@@ -4,11 +4,21 @@
 // lets one opener fan out into many variations automatically.
 import type { Contact } from "./types";
 
-const VAR_RE = /\{\{\s*([\w.]+)\s*\}\}/g;
-// A spintax group: single braces wrapping 2+ options separated by "|".
-// Requiring a pipe and forbidding nested braces means {{variables}} are never
-// mistaken for spintax (they have no "|" and use double braces).
-const SPINTAX_RE = /\{([^{}]*\|[^{}]*)\}/g;
+// Variable names may contain letters/digits/._- and inner spaces, so hand-typed
+// tags like {{First name}} or {{First_Name}} are recognized too (lookup is
+// case/spacing-insensitive — see renderTemplate). "|" is excluded so a spintax
+// group can never be mistaken for a variable.
+const VAR_RE = /\{\{\s*([\w.-]+(?:[^\S\r\n]+[\w.-]+)*)\s*\}\}/g;
+
+// "First Name" / "first_name" / "firstName" all normalize to "firstname".
+const normalizeKey = (k: string) => k.toLowerCase().replace(/[^a-z0-9]/g, "");
+// A spintax group: single braces wrapping 2+ options separated by "|". An
+// option may contain {{variables}} ("{Hey {{first_name}}|Hi {{first_name}}}")
+// but no other braces. Requiring a pipe means {{variables}} are never mistaken
+// for spintax (they have no "|" and use double braces), and options can be
+// split on "|" safely since variable names can't contain it.
+const SPINTAX_OPT = /(?:[^{}|]|\{\{[^{}]*\}\})*/.source;
+const SPINTAX_RE = new RegExp(`\\{(${SPINTAX_OPT}(?:\\|${SPINTAX_OPT})+)\\}`, "g");
 
 export type RenderOpts = {
   // Picks a number in [0, 1). Defaults to Math.random for true per-send
@@ -53,8 +63,12 @@ export function renderTemplate(
 ): string {
   // Spintax first, so a chosen option's {{variables}} still get filled in.
   const spun = applySpintax(body, opts?.rand);
+  const byNormKey = new Map<string, unknown>();
+  for (const [k, v] of Object.entries(vars)) byNormKey.set(normalizeKey(k), v);
   return spun.replace(VAR_RE, (_full, key: string) => {
-    const v = vars[key];
+    const v = Object.hasOwn(vars, key)
+      ? vars[key]
+      : byNormKey.get(normalizeKey(key));
     return v === undefined || v === null ? "" : String(v);
   });
 }
@@ -62,11 +76,13 @@ export function renderTemplate(
 // Standard variables available in every template, derived from a contact.
 export function contactVars(c: Partial<Contact>): Record<string, string> {
   const name = (c.name ?? "").trim();
-  const first = name.split(/\s+/)[0] ?? "";
+  const parts = name.split(/\s+/);
+  const first = parts[0] ?? "";
   return {
     name,
     first_name: first,
     firstName: first,
+    last_name: parts.slice(1).join(" "),
     company: c.company ?? "",
     email: c.email ?? "",
     phone: c.phone ?? "",

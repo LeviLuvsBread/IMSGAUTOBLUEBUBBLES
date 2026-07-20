@@ -3,6 +3,7 @@
 // Friendly, click-to-insert merge fields so users never type {{...}} by hand.
 const FIELDS = [
   { var: "{{first_name}}", label: "First name" },
+  { var: "{{last_name}}", label: "Last name" },
   { var: "{{name}}", label: "Full name" },
   { var: "{{company}}", label: "Company" },
   { var: "{{email}}", label: "Email" },
