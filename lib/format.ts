@@ -1,6 +1,12 @@
 // Small display helpers for relative time. Used by the "last contacted" safety
 // indicators in Compose and Contacts.
 
+// The owner's timezone (single-user app). Anchors every "calendar day"
+// boundary — upload-date groups in Compose, Director's added-on filters — so
+// the same lead lands on the same date everywhere, regardless of where the
+// server runs (Vercel is UTC) or what the browser is set to.
+export const OWNER_TZ = "America/New_York";
+
 export function timeAgo(iso: string | null | undefined): string {
   if (!iso) return "never";
   const then = new Date(iso).getTime();

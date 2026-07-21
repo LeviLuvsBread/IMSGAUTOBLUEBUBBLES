@@ -57,6 +57,10 @@ export async function POST(req: Request) {
 
   const messages: ChatMsg[] = [
     { role: "system", content: SYSTEM },
+    {
+      role: "system",
+      content: `Now: ${new Date().toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "full", timeStyle: "short" })} (US Eastern, the owner's timezone). find_contacts addedAfter/addedBefore accept plain YYYY-MM-DD dates and read them in this timezone — to get one day's uploads, pass that date as addedAfter and the next day as addedBefore.`,
+    },
     ...uploadNote,
     ...history,
   ];
@@ -75,7 +79,17 @@ export async function POST(req: Request) {
         try {
           args = JSON.parse(tc.function?.arguments || "{}");
         } catch {
-          /* ignore */
+          // Truncated/garbled tool JSON (usually a too-big batch). Tell the
+          // model instead of silently running with {} — it can retry smaller.
+          messages.push({
+            role: "tool",
+            tool_call_id: tc.id,
+            content: JSON.stringify({
+              error:
+                "Your tool call arguments were cut off or invalid JSON. Retry with fewer items per call (batches of ~40).",
+            }),
+          });
+          continue;
         }
 
         if (name === "navigate") {
@@ -120,6 +134,19 @@ export async function POST(req: Request) {
             }
           }
           const summary = await summarizeAction(supabase, name, args);
+          if (summary === null) {
+            // Nothing actionable (bad ids, no real field changes) — don't show
+            // a confirmable no-op card; let the model fix its call instead.
+            messages.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              content: JSON.stringify({
+                error:
+                  "No valid targets — none of those ids matched real contacts, or no actual field changes were given. Use find_contacts to get fresh ids and try again.",
+              }),
+            });
+            continue;
+          }
           return NextResponse.json({
             reply: m.content || "",
             action: { kind: "confirm", name, args, summary },

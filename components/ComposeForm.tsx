@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { sendBulkNow, sendBulkAuto } from "@/app/(app)/actions";
 import { renderForContact } from "@/lib/templating";
-import { timeAgo, daysSince } from "@/lib/format";
+import { timeAgo, daysSince, OWNER_TZ } from "@/lib/format";
 import { MergeFields } from "@/components/MergeFields";
 import { cn } from "@/lib/cn";
 import type { Contact, Template } from "@/lib/types";
@@ -33,8 +33,12 @@ import type { Contact, Template } from "@/lib/types";
 const AUTO = "__auto__";
 // Selecting someone contacted within this many days flags a re-message warning.
 const RECENT_DAYS = 7;
-// Contacts created within this many days count as "recently added".
-const RECENT_ADDED_DAYS = 7;
+
+// Contacts clustered into upload sessions by created_at: an import writes all
+// its rows within seconds, so any gap bigger than this starts a new upload.
+// Two sheets imported back-to-back within the gap read as one session.
+const UPLOAD_GAP_MS = 10 * 60 * 1000; // 10 minutes
+type UploadGroup = { key: string; label: string; ids: string[]; newest: number };
 
 // "Last contacted" chip for a recipient row — amber if it was recent.
 function LastPill({ iso }: { iso?: string }) {
@@ -143,27 +147,64 @@ export function ComposeForm({
     .map((id) => lastContacted[id])
     .find(Boolean);
 
-  // "Recently added": one tap to (de)select every contact created in the last
-  // RECENT_ADDED_DAYS — the batch you just imported/added. Toggles like the
-  // last-recipients chip.
-  const recentlyAdded = useMemo(
-    () =>
-      contacts
-        .filter((c) => {
-          const d = daysSince(c.created_at);
-          return d !== null && d < RECENT_ADDED_DAYS;
-        })
-        .map((c) => c.id),
-    [contacts],
+  // "Uploads": contacts clustered into upload sessions (see UPLOAD_GAP_MS),
+  // newest first — a log of every batch you've added. Each session selects
+  // with one tap: the newest gets its own chip, the rest live in a dropdown.
+  // Labels use the OWNER'S timezone so SSR, browser, and Director's date
+  // filters all agree on what day an upload happened (hydration-safe too).
+  const uploads = useMemo<UploadGroup[]>(() => {
+    const yearFmt = new Intl.DateTimeFormat("en-US", { timeZone: OWNER_TZ, year: "numeric" });
+    const dateFmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: OWNER_TZ,
+      month: "short",
+      day: "numeric",
+    });
+    const dateWithYearFmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: OWNER_TZ,
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+    const timeFmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: OWNER_TZ,
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    const thisYear = yearFmt.format(new Date());
+    const rows = contacts
+      .map((c) => ({ id: c.id, t: c.created_at ? new Date(c.created_at).getTime() : NaN }))
+      .filter((r) => Number.isFinite(r.t))
+      .sort((a, b) => b.t - a.t);
+    const groups: UploadGroup[] = [];
+    let cur: UploadGroup | null = null;
+    let prevT = 0;
+    for (const r of rows) {
+      if (!cur || prevT - r.t > UPLOAD_GAP_MS) {
+        cur = { key: String(r.t), label: "", ids: [], newest: r.t };
+        groups.push(cur);
+      }
+      cur.ids.push(r.id);
+      prevT = r.t;
+    }
+    for (const g of groups) {
+      const df = yearFmt.format(g.newest) === thisYear ? dateFmt : dateWithYearFmt;
+      g.label = `${df.format(g.newest)}, ${timeFmt.format(g.newest)}`;
+    }
+    return groups;
+  }, [contacts]);
+
+  const newestUpload: UploadGroup | undefined = uploads[0];
+  const newestUploadSet = useMemo(
+    () => new Set(newestUpload?.ids ?? []),
+    [newestUpload],
   );
-  const recentlyAddedSet = useMemo(() => new Set(recentlyAdded), [recentlyAdded]);
-  const recentAddedSelected =
-    recentlyAdded.length > 0 && recentlyAdded.every((id) => selected.has(id));
-  const toggleRecentlyAdded = () =>
+  const isUploadSelected = (g: UploadGroup) =>
+    g.ids.length > 0 && g.ids.every((id) => selected.has(id));
+  const toggleUpload = (g: UploadGroup) =>
     setSelected((prev) => {
       const n = new Set(prev);
-      if (recentAddedSelected) recentlyAdded.forEach((id) => n.delete(id));
-      else recentlyAdded.forEach((id) => n.add(id));
+      if (isUploadSelected(g)) g.ids.forEach((id) => n.delete(id));
+      else g.ids.forEach((id) => n.add(id));
       return n;
     });
 
@@ -348,8 +389,8 @@ export function ComposeForm({
           ) : null}
         </div>
 
-        {lastBatch.length > 0 || recentlyAdded.length > 0 ? (
-          <div className="mt-2 flex flex-wrap gap-1.5">
+        {lastBatch.length > 0 || uploads.length > 0 ? (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {lastBatch.length > 0 ? (
               <button
                 type="button"
@@ -375,22 +416,50 @@ export function ComposeForm({
                 ) : null}
               </button>
             ) : null}
-            {recentlyAdded.length > 0 ? (
+            {newestUpload ? (
               <button
                 type="button"
-                onClick={toggleRecentlyAdded}
-                title={`Select every contact added in the last ${RECENT_ADDED_DAYS} days`}
+                onClick={() => toggleUpload(newestUpload)}
+                title={`Select the ${newestUpload.ids.length} leads added ${newestUpload.label} — your latest upload`}
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-footnote font-medium ring-1 transition-colors duration-fast ease-ios",
-                  recentAddedSelected
+                  isUploadSelected(newestUpload)
                     ? "bg-accent text-white ring-accent"
                     : "bg-fill-secondary text-label ring-hairline hover:bg-fill-tertiary",
                 )}
               >
                 <UserPlus className="h-3.5 w-3.5" />
-                {recentAddedSelected ? "Clear recently added" : "Recently added"} (
-                {recentlyAdded.length})
+                {isUploadSelected(newestUpload) ? "Clear newest upload" : "Newest upload"} (
+                {newestUpload.ids.length})
+                <span
+                  className={cn(
+                    isUploadSelected(newestUpload) ? "text-white/70" : "text-label-secondary",
+                  )}
+                >
+                  · {newestUpload.label}
+                </span>
               </button>
+            ) : null}
+            {uploads.length > 1 ? (
+              <select
+                value=""
+                onChange={(e) => {
+                  const g = uploads.find((u) => u.key === e.target.value);
+                  if (g) toggleUpload(g);
+                }}
+                title="Select (or clear) every lead added on a past date"
+                className="shrink-0 rounded-full bg-fill-secondary px-3 py-1.5 text-footnote font-medium text-label outline-none ring-1 ring-hairline transition-colors duration-fast ease-ios hover:bg-fill-tertiary"
+              >
+                <option value="" disabled>
+                  Past uploads…
+                </option>
+                {uploads.slice(1, 21).map((g) => (
+                  <option key={g.key} value={g.key}>
+                    {isUploadSelected(g) ? "✓ " : ""}
+                    {g.label} · {g.ids.length} lead{g.ids.length === 1 ? "" : "s"}
+                  </option>
+                ))}
+              </select>
             ) : null}
           </div>
         ) : null}
@@ -459,7 +528,7 @@ export function ComposeForm({
                     <span className="pointer-events-none min-w-0 flex-1">
                       <span className="flex items-center gap-1.5">
                         <span className="truncate text-subhead">{c.name}</span>
-                        {recentlyAddedSet.has(c.id) ? (
+                        {newestUploadSet.has(c.id) ? (
                           <span className="shrink-0 rounded-full bg-success/15 px-1.5 py-0.5 text-caption2 font-medium text-success">
                             new
                           </span>

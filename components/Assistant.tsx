@@ -3,11 +3,25 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Sparkles, Send, X, Loader2, Check, Paperclip, FileSpreadsheet, FileText } from "lucide-react";
+import {
+  Sparkles,
+  Send,
+  X,
+  Loader2,
+  Check,
+  Paperclip,
+  FileSpreadsheet,
+  FileText,
+  Plus,
+  History,
+  Trash2,
+} from "lucide-react";
 import { parseCsv } from "@/lib/csv";
+import { timeAgo } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 type Msg = { role: "user" | "assistant"; content: string };
+type Chat = { id: string; title: string; msgs: Msg[]; updatedAt: number };
 type Pending = { name: string; args: Record<string, unknown>; summary: string };
 type Upload = {
   kind: "sheet" | "file";
@@ -20,6 +34,55 @@ type Upload = {
 };
 
 const MAX_SHEET_ROWS = 2000;
+
+// Chat history lives in the browser (single-user app) — survives closing the
+// panel and full reloads. Capped so storage stays small.
+const CHATS_KEY = "director-chats-v1";
+const MAX_CHATS = 20;
+const MAX_MSGS_PER_CHAT = 200;
+
+const WELCOME: Msg = {
+  role: "assistant",
+  content:
+    "Hey — I'm your Director. Ask me to find contacts, text people, edit or import leads, manage templates, tune settings, check what's going on, or jump to any page. Attach a file with the paperclip and I can import a lead sheet or send the file to people. Anything that sends or changes data, I'll show you first.",
+};
+
+const newChat = (): Chat => ({
+  id: crypto.randomUUID(),
+  title: "New chat",
+  msgs: [WELCOME],
+  updatedAt: Date.now(),
+});
+
+function loadChats(): Chat[] {
+  try {
+    const raw = localStorage.getItem(CHATS_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Chat[]) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((c) => c && typeof c.id === "string" && Array.isArray(c.msgs))
+      .slice(0, MAX_CHATS);
+  } catch {
+    return [];
+  }
+}
+
+function saveChats(chats: Chat[]) {
+  try {
+    localStorage.setItem(
+      CHATS_KEY,
+      JSON.stringify(
+        chats
+          .slice()
+          .sort((a, b) => b.updatedAt - a.updatedAt)
+          .slice(0, MAX_CHATS)
+          .map((c) => ({ ...c, msgs: c.msgs.slice(-MAX_MSGS_PER_CHAT) })),
+      ),
+    );
+  } catch {
+    /* storage full/blocked — chat still works, just won't persist */
+  }
+}
 
 // Parse a spreadsheet the same way the Contacts importer does (CSV inline,
 // Excel/ODS via on-demand SheetJS). Returns null if it isn't parseable.
@@ -57,13 +120,10 @@ async function parseSheet(
 export function Assistant() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [msgs, setMsgs] = useState<Msg[]>([
-    {
-      role: "assistant",
-      content:
-        "Hey — I'm your Director. Ask me to find contacts, text people, check what's going on, or jump to any page. Attach a file with the paperclip and I can import a lead sheet or send the file to people. Anything that sends, I'll show you first.",
-    },
-  ]);
+  const [msgs, setMsgs] = useState<Msg[]>([WELCOME]);
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<Pending | null>(null);
@@ -109,6 +169,76 @@ export function Assistant() {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs, pending, busy, open]);
 
+  // Resume where you left off: load saved chats once, open the most recent.
+  useEffect(() => {
+    const loaded = loadChats();
+    const recent = [...loaded].sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    const active = recent ?? newChat();
+    setChats(loaded.length ? loaded : [active]);
+    setActiveId(active.id);
+    setMsgs(active.msgs);
+  }, []);
+
+  // Mirror the open conversation into the chat list + localStorage on every
+  // message, titling it from the first thing the owner asked.
+  useEffect(() => {
+    if (!activeId) return;
+    setChats((prev) => {
+      const firstUser = msgs.find((m) => m.role === "user");
+      const title = firstUser ? firstUser.content.slice(0, 48) : "New chat";
+      const entry: Chat = { id: activeId, title, msgs, updatedAt: Date.now() };
+      const next = prev.some((c) => c.id === activeId)
+        ? prev.map((c) => (c.id === activeId ? entry : c))
+        : [entry, ...prev];
+      saveChats(next);
+      return next;
+    });
+  }, [msgs, activeId]);
+
+  const startNewChat = () => {
+    if (busy) return;
+    const c = newChat();
+    setChats((prev) => {
+      const next = [c, ...prev].slice(0, MAX_CHATS);
+      saveChats(next);
+      return next;
+    });
+    setActiveId(c.id);
+    setMsgs(c.msgs);
+    setPending(null);
+    setUpload(null);
+    setShowHistory(false);
+  };
+
+  const openChat = (id: string) => {
+    if (busy || id === activeId) {
+      setShowHistory(false);
+      return;
+    }
+    const c = chats.find((x) => x.id === id);
+    if (!c) return;
+    setActiveId(id);
+    setMsgs(c.msgs);
+    setPending(null);
+    setShowHistory(false);
+  };
+
+  const deleteChat = (id: string) => {
+    const remaining = chats.filter((c) => c.id !== id);
+    setChats(remaining);
+    saveChats(remaining);
+    if (id === activeId) {
+      const nextUp = [...remaining].sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      if (nextUp) {
+        setActiveId(nextUp.id);
+        setMsgs(nextUp.msgs);
+        setPending(null);
+      } else {
+        startNewChat();
+      }
+    }
+  };
+
   const send = async () => {
     const text = input.trim();
     if (!text || busy) return;
@@ -121,7 +251,7 @@ export function Assistant() {
       const r = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next, upload }),
+        body: JSON.stringify({ messages: next.slice(-12), upload }),
       });
       const d = await r.json();
       if (d.reply) setMsgs((m) => [...m, { role: "assistant", content: d.reply }]);
@@ -184,18 +314,79 @@ export function Assistant() {
             transition={{ type: "spring", stiffness: 420, damping: 34 }}
             className="liquid-glass fixed bottom-24 right-5 z-[60] flex h-[min(70vh,560px)] w-[min(92vw,400px)] flex-col overflow-hidden rounded-card-lg ring-1 ring-white/15"
           >
-            <div className="flex items-center gap-2 border-b border-separator px-4 py-3">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/15 text-accent">
-                <Sparkles className="h-4 w-4" />
-              </span>
-              <span className="text-subhead font-semibold">Director</span>
-              <button
-                onClick={() => setOpen(false)}
-                aria-label="Close"
-                className="press ml-auto flex h-7 w-7 items-center justify-center rounded-full bg-fill text-label-secondary"
-              >
-                <X className="h-4 w-4" />
-              </button>
+            <div className="relative border-b border-separator">
+              <div className="flex items-center gap-2 px-4 py-3">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/15 text-accent">
+                  <Sparkles className="h-4 w-4" />
+                </span>
+                <span className="text-subhead font-semibold">Director</span>
+                <button
+                  onClick={() => setShowHistory((s) => !s)}
+                  aria-label="Chat history"
+                  title="Past chats"
+                  className={cn(
+                    "press ml-auto flex h-7 w-7 items-center justify-center rounded-full",
+                    showHistory ? "bg-accent text-white" : "bg-fill text-label-secondary",
+                  )}
+                >
+                  <History className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={startNewChat}
+                  aria-label="New chat"
+                  title="Start a new chat"
+                  className="press flex h-7 w-7 items-center justify-center rounded-full bg-fill text-label-secondary"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setOpen(false)}
+                  aria-label="Close"
+                  className="press flex h-7 w-7 items-center justify-center rounded-full bg-fill text-label-secondary"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {showHistory ? (
+                <div className="absolute inset-x-2 top-full z-10 mt-1 max-h-64 overflow-y-auto rounded-card bg-surface p-1 shadow-overlay ring-1 ring-black/[0.06] dark:ring-white/[0.1]">
+                  {[...chats]
+                    .sort((a, b) => b.updatedAt - a.updatedAt)
+                    .map((c) => (
+                      <div
+                        key={c.id}
+                        className={cn(
+                          "group flex items-center gap-2 rounded-control px-2.5 py-2",
+                          c.id === activeId ? "bg-accent/[0.08]" : "hover:bg-fill-tertiary",
+                        )}
+                      >
+                        <button
+                          onClick={() => openChat(c.id)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <span className="block truncate text-footnote font-medium text-label">
+                            {c.title}
+                          </span>
+                          <span suppressHydrationWarning className="block text-caption2 text-label-secondary">
+                            {timeAgo(new Date(c.updatedAt).toISOString())}
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => deleteChat(c.id)}
+                          aria-label={`Delete chat "${c.title}"`}
+                          className="press flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-label-secondary opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger group-hover:opacity-100"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  {chats.length === 0 ? (
+                    <p className="px-2.5 py-3 text-center text-caption text-label-secondary">
+                      No past chats yet.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
 
             <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
