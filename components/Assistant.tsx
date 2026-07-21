@@ -67,16 +67,27 @@ function loadChats(): Chat[] {
   }
 }
 
-function saveChats(chats: Chat[]) {
+const capChats = (chats: Chat[]): Chat[] =>
+  [...chats].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, MAX_CHATS);
+
+// Persist by MERGING with what's already stored (newest updatedAt wins per
+// chat) so a second open tab can't clobber chats it never saw. Deletions are
+// explicit via removeIds — otherwise the merge would resurrect them.
+function saveChats(chats: Chat[], removeIds: string[] = []) {
   try {
+    const byId = new Map(loadChats().map((c) => [c.id, c]));
+    for (const c of chats) {
+      const existing = byId.get(c.id);
+      if (!existing || c.updatedAt >= existing.updatedAt) byId.set(c.id, c);
+    }
+    for (const id of removeIds) byId.delete(id);
     localStorage.setItem(
       CHATS_KEY,
       JSON.stringify(
-        chats
-          .slice()
-          .sort((a, b) => b.updatedAt - a.updatedAt)
-          .slice(0, MAX_CHATS)
-          .map((c) => ({ ...c, msgs: c.msgs.slice(-MAX_MSGS_PER_CHAT) })),
+        capChats([...byId.values()]).map((c) => ({
+          ...c,
+          msgs: c.msgs.slice(-MAX_MSGS_PER_CHAT),
+        })),
       ),
     );
   } catch {
@@ -179,17 +190,21 @@ export function Assistant() {
     setMsgs(active.msgs);
   }, []);
 
-  // Mirror the open conversation into the chat list + localStorage on every
-  // message, titling it from the first thing the owner asked.
+  // Mirror the open conversation into the chat list + localStorage when its
+  // messages actually change, titling it from the first thing the owner asked.
+  // Same-reference msgs (mount load, reopening a chat) are skipped so merely
+  // LOOKING at a chat never bumps its updatedAt or reorders history.
   useEffect(() => {
     if (!activeId) return;
     setChats((prev) => {
+      const existing = prev.find((c) => c.id === activeId);
+      if (existing && existing.msgs === msgs) return prev;
       const firstUser = msgs.find((m) => m.role === "user");
       const title = firstUser ? firstUser.content.slice(0, 48) : "New chat";
       const entry: Chat = { id: activeId, title, msgs, updatedAt: Date.now() };
-      const next = prev.some((c) => c.id === activeId)
-        ? prev.map((c) => (c.id === activeId ? entry : c))
-        : [entry, ...prev];
+      const next = capChats(
+        existing ? prev.map((c) => (c.id === activeId ? entry : c)) : [entry, ...prev],
+      );
       saveChats(next);
       return next;
     });
@@ -199,7 +214,7 @@ export function Assistant() {
     if (busy) return;
     const c = newChat();
     setChats((prev) => {
-      const next = [c, ...prev].slice(0, MAX_CHATS);
+      const next = capChats([c, ...prev]);
       saveChats(next);
       return next;
     });
@@ -224,9 +239,12 @@ export function Assistant() {
   };
 
   const deleteChat = (id: string) => {
+    // Guarded while a request is in flight — otherwise the reply (or worse, a
+    // pending confirm card) would land in whatever chat we switch to.
+    if (busy) return;
     const remaining = chats.filter((c) => c.id !== id);
     setChats(remaining);
-    saveChats(remaining);
+    saveChats(remaining, [id]);
     if (id === activeId) {
       const nextUp = [...remaining].sort((a, b) => b.updatedAt - a.updatedAt)[0];
       if (nextUp) {

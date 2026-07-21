@@ -459,6 +459,11 @@ export function ComposeForm({
                     {g.label} · {g.ids.length} lead{g.ids.length === 1 ? "" : "s"}
                   </option>
                 ))}
+                {uploads.length > 21 ? (
+                  <option value="" disabled>
+                    …{uploads.length - 21} older (find them by search or tag)
+                  </option>
+                ) : null}
               </select>
             ) : null}
           </div>

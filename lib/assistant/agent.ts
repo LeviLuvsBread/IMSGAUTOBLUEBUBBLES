@@ -543,8 +543,15 @@ type NewContact = {
   notes: string | null;
 };
 
-function buildNewContacts(args: Args): { rows: NewContact[]; badPhone: number; dupes: number } {
-  const list = Array.isArray(args.contacts) ? args.contacts.slice(0, 500) : [];
+function buildNewContacts(args: Args): {
+  rows: NewContact[];
+  badPhone: number;
+  dupes: number;
+  dropped: number;
+} {
+  const listRaw = Array.isArray(args.contacts) ? args.contacts : [];
+  const list = listRaw.slice(0, 500);
+  const dropped = listRaw.length - list.length;
   const tagAllList = splitTags(String(args.tagAll ?? ""));
   const seen = new Set<string>();
   const rows: NewContact[] = [];
@@ -580,13 +587,18 @@ function buildNewContacts(args: Args): { rows: NewContact[]; badPhone: number; d
       notes: String(raw?.notes ?? "").trim() || null,
     });
   }
-  return { rows, badPhone, dupes };
+  return { rows, badPhone, dupes, dropped };
 }
 
 // Sanitized app_settings patch + confirm-card lines. Values are clamped to
 // sane ranges; a spacing under 2 min gets a loud warning (the number was
 // already spam-flagged once — spacing is the main protection).
-function buildSettingsPatch(args: Args): {
+type StoredWindow = { send_window_start: number | null; send_window_end: number | null };
+
+function buildSettingsPatch(
+  args: Args,
+  current: StoredWindow,
+): {
   patch: Record<string, unknown>;
   lines: string[];
   warnings: string[];
@@ -622,20 +634,68 @@ function buildSettingsPatch(args: Args): {
     lines.push("send window → anytime (no hour limits)");
   } else {
     const ws = num(args.sendWindowStart);
-    if (ws !== null) {
-      patch.send_window_start = clamp(ws, 0, 23);
-      lines.push(`send window opens → ${patch.send_window_start}:00`);
-    }
     const we = num(args.sendWindowEnd);
-    if (we !== null) {
-      patch.send_window_end = clamp(we, 0, 23);
-      lines.push(`send window closes → ${patch.send_window_end}:00`);
+    if (ws !== null) patch.send_window_start = clamp(ws, 0, 23);
+    if (we !== null) patch.send_window_end = clamp(we, 0, 23);
+    if (ws !== null || we !== null) {
+      // Validate the EFFECTIVE window (patch merged over stored values): the
+      // DB gate blocks every hour when start >= end, which would silently
+      // halt all sending with zero errors anywhere.
+      const effStart = (patch.send_window_start ?? current.send_window_start) as number | null;
+      const effEnd = (patch.send_window_end ?? current.send_window_end) as number | null;
+      if (effStart !== null && effEnd !== null && effStart >= effEnd) {
+        delete patch.send_window_start;
+        delete patch.send_window_end;
+        warnings.push(
+          `⚠️ a ${effStart}:00–${effEnd}:00 window would block EVERY hour and stop all sending (start must be before end; overnight windows aren't supported) — window left unchanged`,
+        );
+      } else {
+        if (patch.send_window_start !== undefined)
+          lines.push(`send window opens → ${patch.send_window_start}:00`);
+        if (patch.send_window_end !== undefined)
+          lines.push(`send window closes → ${patch.send_window_end}:00`);
+        if ((effStart === null) !== (effEnd === null)) {
+          warnings.push(
+            "note: the window only kicks in once BOTH open and close hours are set — the other side is currently unset, so texts still go out at any hour",
+          );
+        }
+      }
     }
   }
   if (typeof patch.min_delay_seconds === "number" && patch.min_delay_seconds < 120) {
     warnings.push("⚠️ spacing under 2 minutes — risky for the number after the earlier Apple flag");
   }
   return { patch, lines, warnings };
+}
+
+async function storedWindow(supabase: SupabaseClient): Promise<StoredWindow> {
+  const { data, error } = await supabase
+    .from("app_settings")
+    .select("send_window_start,send_window_end")
+    .eq("id", true)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return {
+    send_window_start: (data?.send_window_start ?? null) as number | null,
+    send_window_end: (data?.send_window_end ?? null) as number | null,
+  };
+}
+
+// Which template save_template targets: an explicit uuid id, else an existing
+// template with the same (case-insensitive) name — so "rewrite my Opener"
+// without an id updates Opener instead of silently forking a duplicate.
+async function resolveTemplateId(
+  supabase: SupabaseClient,
+  args: Args,
+  tName: string,
+): Promise<string | null> {
+  if (typeof args.id === "string" && UUID_RE.test(args.id)) return args.id;
+  const { data, error } = await supabase.from("templates").select("id,name").limit(200);
+  if (error) throw new Error(error.message);
+  const hit = (data ?? []).find(
+    (t) => String(t.name ?? "").trim().toLowerCase() === tName.toLowerCase(),
+  );
+  return hit ? (hit.id as string) : null;
 }
 
 const uniqueUuids = (v: unknown): string[] => [
@@ -809,36 +869,57 @@ export async function summarizeAction(
     const tName = String(args.name ?? "").trim();
     const body = String(args.body ?? "").trim();
     if (!tName || !body) return null;
-    const id = typeof args.id === "string" && UUID_RE.test(args.id) ? args.id : null;
-    let verb = "Create";
+    const id = await resolveTemplateId(supabase, args, tName);
+    let header = `Create template “${tName}”`;
     if (id) {
       const { data } = await supabase.from("templates").select("name").eq("id", id).maybeSingle();
       if (!data) return null;
-      verb = `Rewrite template “${(data as { name: string }).name}” as`;
+      const oldName = String((data as { name: string }).name ?? "");
+      header =
+        oldName.trim().toLowerCase() === tName.toLowerCase()
+          ? `Rewrite template “${oldName}”`
+          : `Rewrite template “${oldName}” as “${tName}”`;
     }
     const preview = body.length > 400 ? `${body.slice(0, 400)}…` : body;
-    return `${verb === "Create" ? `Create template “${tName}”` : `${verb} “${tName}”`}:\n\n${preview}`;
+    return `${header}:\n\n${preview}`;
   }
   if (name === "delete_template") {
     const id = typeof args.id === "string" && UUID_RE.test(args.id) ? args.id : null;
     if (!id) return null;
     const { data } = await supabase.from("templates").select("name").eq("id", id).maybeSingle();
     if (!data) return null;
-    return `Delete the template “${(data as { name: string }).name}” permanently.`;
+    // Anything set to render this template at fire time keeps its wording
+    // (frozen at delete) — surface that so the owner knows nothing goes blank.
+    const { data: scheds } = await supabase
+      .from("scheduled_sends")
+      .select("id")
+      .eq("template_id", id)
+      .in("status", ["active", "paused"]);
+    const { data: seqs } = await supabase.from("sequences").select("id,steps");
+    const seqCount = ((seqs ?? []) as { steps?: { template_id?: string | null }[] }[]).filter(
+      (s) => Array.isArray(s.steps) && s.steps.some((st) => st?.template_id === id),
+    ).length;
+    const schedCount = scheds?.length ?? 0;
+    const refNote =
+      schedCount || seqCount
+        ? `\n\nIt's still used by ${schedCount} scheduled send${schedCount === 1 ? "" : "s"} and ${seqCount} sequence${seqCount === 1 ? "" : "s"} — their wording will be frozen as it reads today so nothing goes out blank.`
+        : "";
+    return `Delete the template “${(data as { name: string }).name}” permanently.${refNote}`;
   }
   if (name === "create_contacts") {
-    const { rows, badPhone, dupes } = buildNewContacts(args);
+    const { rows, badPhone, dupes, dropped } = buildNewContacts(args);
     if (rows.length === 0) return null;
     const shown = rows.slice(0, 10).map((r) => `• ${r.name} — ${r.phone}`);
     const notes = [
       rows.length > shown.length ? `…and ${rows.length - shown.length} more` : "",
       badPhone > 0 ? `${badPhone} skipped (no valid phone)` : "",
       dupes > 0 ? `${dupes} duplicate number${dupes === 1 ? "" : "s"} in the list` : "",
+      dropped > 0 ? `${dropped} more didn't fit this call — add the rest in a second call` : "",
     ].filter(Boolean);
     return `Add ${rows.length} contact${rows.length === 1 ? "" : "s"}:\n${shown.join("\n")}${notes.length ? `\n(${notes.join(" · ")})` : ""}`;
   }
   if (name === "update_settings") {
-    const { patch, lines, warnings } = buildSettingsPatch(args);
+    const { patch, lines, warnings } = buildSettingsPatch(args, await storedWindow(supabase));
     if (Object.keys(patch).length === 0) return null;
     return `Update sending settings:\n${lines.map((l) => `• ${l}`).join("\n")}${warnings.length ? `\n\n${warnings.join("\n")}` : ""}`;
   }
@@ -1080,7 +1161,7 @@ export async function executeAction(
     const tName = String(args.name ?? "").trim();
     const body = String(args.body ?? "").trim();
     if (!tName || !body) return "The template needs both a name and a body — nothing was saved.";
-    const id = typeof args.id === "string" && UUID_RE.test(args.id) ? args.id : null;
+    const id = await resolveTemplateId(supabase, args, tName);
     const row = {
       name: tName,
       body,
@@ -1100,12 +1181,46 @@ export async function executeAction(
   if (name === "delete_template") {
     const id = typeof args.id === "string" && UUID_RE.test(args.id) ? args.id : null;
     if (!id) return "No template given — nothing was deleted.";
+    const { data: tpl, error: tplErr } = await supabase
+      .from("templates")
+      .select("body")
+      .eq("id", id)
+      .maybeSingle();
+    if (tplErr) throw new Error(tplErr.message);
+    if (!tpl) return "That template no longer exists.";
+    const tBody = String((tpl as { body: string }).body ?? "");
+    // Freeze the wording into anything that renders this template at fire
+    // time — otherwise those sends would go out BLANK after the delete.
+    const { data: snapped, error: snapErr } = await supabase
+      .from("scheduled_sends")
+      .update({ body: tBody })
+      .eq("template_id", id)
+      .is("body", null)
+      .in("status", ["active", "paused"])
+      .select("id");
+    if (snapErr) throw new Error(snapErr.message);
+    // Sequence steps keep template_id inside jsonb (no FK) — inline the body.
+    const { data: seqs, error: seqErr } = await supabase.from("sequences").select("id,steps");
+    if (seqErr) throw new Error(seqErr.message);
+    let seqTouched = 0;
+    type Step = { template_id?: string | null; body?: string | null; [k: string]: unknown };
+    for (const s of (seqs ?? []) as { id: string; steps: Step[] }[]) {
+      if (!Array.isArray(s.steps) || !s.steps.some((st) => st?.template_id === id)) continue;
+      const steps = s.steps.map((st) =>
+        st?.template_id === id ? { ...st, template_id: null, body: st.body ?? tBody } : st,
+      );
+      const { error } = await supabase.from("sequences").update({ steps }).eq("id", s.id);
+      if (error) throw new Error(error.message);
+      seqTouched++;
+    }
     const { data, error } = await supabase.from("templates").delete().eq("id", id).select("id");
     if (error) throw new Error(error.message);
-    return data?.length ? "✅ Template deleted." : "That template no longer exists.";
+    if (!data?.length) return "That template no longer exists.";
+    const frozen = (snapped?.length ?? 0) + seqTouched;
+    return `✅ Template deleted.${frozen > 0 ? ` ${snapped?.length ?? 0} scheduled send${(snapped?.length ?? 0) === 1 ? "" : "s"} and ${seqTouched} sequence${seqTouched === 1 ? "" : "s"} keep its old wording.` : ""}`;
   }
   if (name === "create_contacts") {
-    const { rows, badPhone, dupes } = buildNewContacts(args);
+    const { rows, badPhone, dupes, dropped } = buildNewContacts(args);
     if (rows.length === 0) return "None of those had a valid phone number — nothing was added.";
     let inserted = 0;
     for (let i = 0; i < rows.length; i += 200) {
@@ -1127,10 +1242,10 @@ export async function executeAction(
       inserted += data?.length ?? 0;
     }
     const already = rows.length - inserted;
-    return `✅ Added ${inserted} contact${inserted === 1 ? "" : "s"}${already > 0 ? ` (${already} already in your list)` : ""}${badPhone > 0 ? ` · ${badPhone} skipped, no valid phone` : ""}${dupes > 0 ? ` · ${dupes} duplicate rows` : ""}.`;
+    return `✅ Added ${inserted} contact${inserted === 1 ? "" : "s"}${already > 0 ? ` (${already} already in your list)` : ""}${badPhone > 0 ? ` · ${badPhone} skipped, no valid phone` : ""}${dupes > 0 ? ` · ${dupes} duplicate rows` : ""}${dropped > 0 ? ` · ${dropped} more didn't fit — add the rest in another call` : ""}.`;
   }
   if (name === "update_settings") {
-    const { patch, lines } = buildSettingsPatch(args);
+    const { patch, lines } = buildSettingsPatch(args, await storedWindow(supabase));
     if (Object.keys(patch).length === 0) return "Nothing valid to change — settings untouched.";
     const { error } = await supabase
       .from("app_settings")

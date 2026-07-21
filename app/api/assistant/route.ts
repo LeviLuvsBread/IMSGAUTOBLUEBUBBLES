@@ -142,7 +142,7 @@ export async function POST(req: Request) {
               tool_call_id: tc.id,
               content: JSON.stringify({
                 error:
-                  "No valid targets — none of those ids matched real contacts, or no actual field changes were given. Use find_contacts to get fresh ids and try again.",
+                  "Nothing actionable in that call — the ids didn't match real records, or no valid changes/values were given (e.g. an invalid send window). Re-check with a read tool (find_contacts / list_templates / get_overview) and try again, or tell the owner why it can't be done.",
               }),
             });
             continue;
