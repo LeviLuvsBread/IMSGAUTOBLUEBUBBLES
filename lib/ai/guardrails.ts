@@ -16,21 +16,12 @@ export function isOptOut(text: string): boolean {
   return OPT_OUT_RE.test((text ?? "").trim());
 }
 
-// Post-draft safety net: catch a model that slipped a rate / approval / amount
-// into the reply despite the compliance stage. Trips → escalate, never send.
+// Safety net for the AI-written OPENER: catch a model that slipped a rate /
+// approval / amount into the text despite the rules. Trips → the opener is
+// discarded and the spintax template sends instead.
 const RISKY_RE =
   /(\d+(\.\d+)?\s*%|\bAPR\b|\bfactor rate\b|\bguarantee|\bapproved for\b|\byou (qualify|are approved|qualify for)\b|\$\s?\d[\d,]*)/i;
 
 export function looksRisky(text: string): boolean {
   return RISKY_RE.test(text ?? "");
-}
-
-// "Needs human" hard rule (from the handoff spec): legal / dispute language must
-// go straight to a person — the AI never replies. Belt to the classifier's
-// suspenders.
-const NEEDS_HUMAN_RE =
-  /\b(attorney|lawyer|lawsuit|\bsue\b|suing|dispute|cease|cease and desist|legal action|litigat)\w*/i;
-
-export function needsHuman(text: string): boolean {
-  return NEEDS_HUMAN_RE.test(text ?? "");
 }

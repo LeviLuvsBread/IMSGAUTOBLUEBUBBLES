@@ -33,8 +33,8 @@ Core rules:
 - ACT, don't interrogate. If a tool can find or do what's asked, do it instead of asking the owner to clarify. Only ask a question when a tool genuinely can't resolve it (a real tie between two contacts, or a risky bulk action).
 - ALWAYS search before claiming you can't find someone. Call find_contacts first. If a full name returns nothing, retry with just the first name, then just the last name, then the company — names may be stored differently than spoken.
 - To text someone: find_contacts to get their id(s), THEN send_message with those ids. The owner gets a confirm card (exact people + message) before anything sends, so propose confidently. Never send to a name you haven't resolved to an id.
-- Read tools (find_contacts, get_overview, list_handovers, recent_replies) run instantly — use them freely to ground every answer. Never invent contacts, numbers, or stats; if a tool returns nothing, say so plainly.
-- Read intent generously: "pause everything" → set_paused(true); "who's ready / any handoffs" → list_handovers; "how are we doing" → get_overview; "open/go to/show me X" → navigate.
+- Read tools (find_contacts, get_overview, list_needs_reply, recent_replies, list_templates) run instantly — use them freely to ground every answer. Never invent contacts, numbers, or stats; if a tool returns nothing, say so plainly.
+- Read intent generously: "pause everything" → set_paused(true); "who's waiting on me / who needs a reply" → list_needs_reply; "how are we doing" → get_overview; "open/go to/show me X" → navigate.
 - The AI writes ONLY the initial opener to each lead — it never replies to conversations; the owner handles every reply personally. If asked to auto-reply or "turn the bot on", explain that replies are owner-only now.
 - Edit contacts freely with update_contacts: rename people, fix companies/emails/phones, retag, add notes, mark do-not-text. Bulk cleanups too — e.g. "keep only first names" → find_contacts, then update_contacts with each contact's id and its new name computed from the current one. Omit fields you aren't changing. delete_contacts removes contacts for good (their past messages stay in the inbox, unlinked; anything queued to them is canceled). The owner confirms a card listing the exact changes first, so propose confidently.
 - Templates: list_templates to read them, save_template to create or rewrite one (merge tags like {{first_name}}/{{company}} + {a|b|c} spintax variation), delete_template to remove one. Add individual people with create_contacts (name + phone); spreadsheets still go through import_contacts.
@@ -74,15 +74,15 @@ export const TOOLS: ToolDef[] = [
     function: {
       name: "get_overview",
       description:
-        "Current status: sent today vs daily cap, queued, failed, leads ready for handover, and whether sending is paused.",
+        "Current status: sent today vs daily cap, queued, failed, threads waiting on the owner's reply, and whether sending is paused.",
       parameters: { type: "object", properties: {} },
     },
   },
   {
     type: "function",
     function: {
-      name: "list_handovers",
-      description: "Leads the AI marked ready for handover, with each summary.",
+      name: "list_needs_reply",
+      description: "Threads where the lead spoke last and is waiting on the owner's reply.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -785,7 +785,7 @@ export async function runReadTool(
     return { templates: data ?? [] };
   }
   if (name === "get_overview") {
-    const [{ data: s }, queued, failed, handover] = await Promise.all([
+    const [{ data: s }, queued, failed, awaitingReply] = await Promise.all([
       supabase
         .from("app_settings")
         .select("sends_today,daily_cap,paused")
@@ -793,7 +793,7 @@ export async function runReadTool(
         .maybeSingle(),
       supabase.from("messages").select("*", { count: "exact", head: true }).eq("direction", "out").eq("status", "queued"),
       supabase.from("messages").select("*", { count: "exact", head: true }).eq("status", "failed"),
-      supabase.from("conversation_state").select("*", { count: "exact", head: true }).eq("lifecycle_stage", "ready_for_handover"),
+      supabase.from("conversation_state").select("*", { count: "exact", head: true }).eq("status", "needs_reply"),
     ]);
     return {
       sentToday: s?.sends_today,
@@ -801,22 +801,22 @@ export async function runReadTool(
       paused: s?.paused,
       queued: queued.count,
       failed: failed.count,
-      readyForHandover: handover.count,
+      waitingOnYourReply: awaitingReply.count,
     };
   }
-  if (name === "list_handovers") {
+  if (name === "list_needs_reply") {
     const { data } = await supabase
       .from("conversation_state")
-      .select("chat_guid,handover_summary,contact:contacts(name)")
-      .eq("lifecycle_stage", "ready_for_handover")
-      .order("ready_at", { ascending: false })
+      .select("chat_guid,updated_at,contact:contacts(name)")
+      .eq("status", "needs_reply")
+      .order("updated_at", { ascending: false })
       .limit(20);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return {
-      handovers: (data ?? []).map((h: any) => ({
+      threads: (data ?? []).map((h: any) => ({
         name: (Array.isArray(h.contact) ? h.contact[0] : h.contact)?.name ?? null,
         chatGuid: h.chat_guid,
-        summary: h.handover_summary,
+        lastActivity: h.updated_at,
       })),
     };
   }

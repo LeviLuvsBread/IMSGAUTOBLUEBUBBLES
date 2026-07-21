@@ -350,8 +350,7 @@ export async function setQueuePaused(paused: boolean) {
   revalidatePath("/queue");
 }
 
-// Cancel every outbound message currently waiting in the send queue. Held AI
-// drafts (ai_pending_approval) are left alone — discard those from the inbox.
+// Cancel every outbound message currently waiting in the send queue.
 // Soft-cancel (status 'canceled') keeps the history instead of deleting.
 export async function clearQueue(): Promise<{ canceled: number }> {
   const { supabase } = await requireUser();
@@ -360,7 +359,6 @@ export async function clearQueue(): Promise<{ canceled: number }> {
     .update({ status: "canceled", updated_at: new Date().toISOString() })
     .eq("direction", "out")
     .eq("status", "queued")
-    .eq("ai_pending_approval", false)
     .select("id");
   revalidatePath("/");
   revalidatePath("/queue");
@@ -463,7 +461,6 @@ export async function sendBulkAuto(
       contactId: c.id,
       body: renderForContact(anchor, c), // spintax-varied fallback + anchor
       source: "auto_outreach",
-      aiGenerated: false,
     };
   });
   const queued = inputs.length ? await enqueueBulk(supabase, inputs) : 0;

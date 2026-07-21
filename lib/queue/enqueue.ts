@@ -16,8 +16,6 @@ export interface EnqueueInput {
   campaignId?: string | null;
   scheduledSendId?: string | null;
   availableAt?: string; // ISO; defaults to now
-  aiGenerated?: boolean; // produced by the AI pipeline
-  aiPendingApproval?: boolean; // held draft — claim_next_send won't send until approved
   attachments?: EnqueueAttachment[]; // files to send (pump streams from storage)
 }
 
@@ -34,8 +32,6 @@ function toRow(input: EnqueueInput) {
     scheduled_send_id: input.scheduledSendId ?? null,
     bb_temp_guid: crypto.randomUUID(),
     available_at: input.availableAt ?? new Date().toISOString(),
-    ai_generated: input.aiGenerated ?? false,
-    ai_pending_approval: input.aiPendingApproval ?? false,
   };
   if (input.attachments?.length) row.attachments = input.attachments;
   return row;

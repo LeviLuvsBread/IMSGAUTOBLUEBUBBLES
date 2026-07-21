@@ -5,13 +5,12 @@ import type { AppSettings, Message } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-type HandoverRow = {
+type NeedsReplyRow = {
   chat_guid: string;
-  handover_summary: string | null;
   contact: { name: string | null } | { name: string | null }[] | null;
 };
 
-function contactName(c: HandoverRow["contact"]): string {
+function contactName(c: NeedsReplyRow["contact"]): string {
   if (!c) return "";
   const obj = Array.isArray(c) ? c[0] : c;
   return obj?.name ?? "";
@@ -26,7 +25,7 @@ export default async function DashboardPage() {
     failed,
     recentInbound,
     recentFailed,
-    handoverRes,
+    needsReplyRes,
   ] = await Promise.all([
     supabase.from("app_settings").select("*").eq("id", true).maybeSingle(),
     supabase
@@ -50,18 +49,20 @@ export default async function DashboardPage() {
       .eq("status", "failed")
       .order("updated_at", { ascending: false })
       .limit(5),
+    // Threads where the lead spoke last — replies are handled personally
+    // (the AI only writes openers), so these are the owner's action list.
     supabase
       .from("conversation_state")
-      .select("chat_guid, handover_summary, contact:contacts(name)")
-      .eq("lifecycle_stage", "ready_for_handover")
-      .order("ready_at", { ascending: false })
+      .select("chat_guid, contact:contacts(name)")
+      .eq("status", "needs_reply")
+      .order("updated_at", { ascending: false })
       .limit(8),
   ]);
 
   const settings = settingsRow as AppSettings | null;
   const failedRows = (recentFailed.data ?? []) as Message[];
   const inboundRows = (recentInbound.data ?? []) as Message[];
-  const handoverRows = (handoverRes.data ?? []) as HandoverRow[];
+  const needsReplyRows = (needsReplyRes.data ?? []) as NeedsReplyRow[];
 
   const minDelay = settings?.min_delay_seconds ?? 0;
 
@@ -85,10 +86,9 @@ export default async function DashboardPage() {
         body: m.body ?? "",
         error: m.error ?? null,
       }))}
-      handovers={handoverRows.map((h) => ({
+      needsReply={needsReplyRows.map((h) => ({
         chatGuid: h.chat_guid,
         name: contactName(h.contact),
-        summary: h.handover_summary,
       }))}
       requeue={requeueMessage}
       setPaused={setQueuePaused}

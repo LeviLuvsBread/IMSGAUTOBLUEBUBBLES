@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-// User-initiated outreach sources only — excludes AI conversation replies
-// ("ai") and inbound ("reply"), so "last recipients" is the last group YOU
-// actually composed/sent to, not whoever the auto-responder last answered.
+// User-initiated outreach sources only — excludes inbound ("reply") and
+// legacy AI-reply rows ("ai", from the removed responder), so "last
+// recipients" is the last group YOU actually composed/sent to.
 const OUTREACH_SOURCES = ["bulk", "auto_outreach", "manual", "assistant"];
 
 // Statuses that mean "I sent this" (or it's on its way out) — a canceled or

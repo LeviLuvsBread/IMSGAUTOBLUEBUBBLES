@@ -161,6 +161,9 @@ app/
 lib/
   provider/         MessageProvider interface + BlueBubbles implementation
   queue/            enqueue, pump (drain + materialize), reconcile (match receipts)
+  ai/               opener generator + guardrails (needs OPENROUTER_API_KEY) —
+                    the AI writes ONLY the first message; it never replies
+  assistant/        the owner-facing Director agent (chat bubble)
   supabase/         browser / server / middleware / admin clients
   chat, templating, throttle, segments, types
 supabase/migrations/0001_init.sql
@@ -179,6 +182,8 @@ ops/                launchd pinger for the free pump strategy
 ---
 
 ## Roadmap / not yet built
-- AI-drafted replies (Claude) with a human-approve step before send.
-- CSV contact import; richer sequence UI (the engine + `stop_on_reply` exist).
+> Note: AI-drafted replies were built, then deliberately REMOVED (2026-07-21) —
+> the AI writes only the initial opener; the owner personally handles every
+> conversation. Don't re-add auto-replies without an explicit owner decision.
+- Richer sequence UI (the engine + `stop_on_reply` exist).
 - Offline service worker (manifest/installability already work).

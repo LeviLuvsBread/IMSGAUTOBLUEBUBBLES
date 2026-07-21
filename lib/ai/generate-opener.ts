@@ -8,8 +8,7 @@ const OUTREACH_MODEL = "google/gemini-2.5-flash";
 
 // Compliance rules used when the owner hasn't set ai_knowledge. Identity/voice
 // is intentionally NOT hard-coded here — it's inferred from the anchor
-// templates below so the opener always sounds like the user's own openers
-// (rather than the AI-responder persona, which may be a different character).
+// templates below so the opener always sounds like the user's own openers.
 const DEFAULT_KNOWLEDGE =
   "Texting business owners about working capital / funding. NEVER quote rates, %, APR, factor rates, fees, terms, or approval amounts. NEVER guarantee approval. Keep it to 1-2 short sentences with one easy question. No em-dashes.";
 

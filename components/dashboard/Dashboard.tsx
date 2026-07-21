@@ -26,7 +26,7 @@ import { OptOutButton } from "@/components/OptOutButton";
 
 type Reply = { id: string; chatGuid: string; body: string };
 type Failed = { id: string; chatGuid: string; body: string; error: string | null };
-type Handover = { chatGuid: string; name: string; summary: string | null };
+type NeedsReply = { chatGuid: string; name: string };
 
 export type DashboardData = {
   sentToday: number;
@@ -38,7 +38,7 @@ export type DashboardData = {
   maxDelay: number;
   replies: Reply[];
   failedRows: Failed[];
-  handovers: Handover[];
+  needsReply: NeedsReply[];
 };
 
 const container: Variants = {
@@ -305,7 +305,7 @@ export function Dashboard({
   maxDelay,
   replies,
   failedRows,
-  handovers,
+  needsReply,
   requeue,
   setPaused,
 }: DashboardData & {
@@ -402,17 +402,17 @@ export function Dashboard({
         />
       </motion.div>
 
-      {/* Ready for handover */}
-      {handovers.length > 0 ? (
+      {/* Threads where the lead spoke last — replies are all handled by you */}
+      {needsReply.length > 0 ? (
         <motion.section
           variants={item}
           className="rounded-card border border-accent/25 bg-accent/[0.05] p-2"
         >
           <h2 className="flex items-center gap-1.5 px-3 py-2 text-subhead font-semibold text-accent">
-            <Sparkles className="h-4 w-4" /> Ready for handover
+            <Sparkles className="h-4 w-4" /> Waiting on your reply
           </h2>
           <ul>
-            {handovers.map((h) => (
+            {needsReply.map((h) => (
               <li key={h.chatGuid} className="flex items-center gap-1.5 pr-2">
                 <Link
                   href={`/inbox/${encodeURIComponent(h.chatGuid)}`}
@@ -426,7 +426,7 @@ export function Dashboard({
                       {h.name || h.chatGuid}
                     </span>
                     <span className="block truncate text-caption text-label-secondary">
-                      {h.summary || "Ready for you to take over."}
+                      They replied — jump back in.
                     </span>
                   </span>
                   <ChevronRight className="h-4 w-4 shrink-0 text-label-tertiary" />

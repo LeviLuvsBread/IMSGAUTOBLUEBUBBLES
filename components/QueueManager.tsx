@@ -199,7 +199,7 @@ export function QueueManager({
   const clear = () => {
     if (
       !confirm(
-        `Clear the queue? This cancels all ${items.length} waiting message${items.length === 1 ? "" : "s"} (held AI drafts are kept).`,
+        `Clear the queue? This cancels all ${items.length} waiting message${items.length === 1 ? "" : "s"}.`,
       )
     )
       return;

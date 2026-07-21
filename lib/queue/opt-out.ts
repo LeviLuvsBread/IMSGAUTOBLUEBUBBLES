@@ -2,9 +2,9 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 // Hard opt-out: mark the contact, cancel anything queued to them, stop every
-// sequence, and park the conversation as opted_out so the AI never replies.
-// Shared by the webhook ingest, the AI responder, and the manual "Opt out"
-// button — one routine, one behavior.
+// sequence, and park the conversation as opted_out. Shared by the webhook
+// ingest, the Director assistant, and the manual "Opt out" button — one
+// routine, one behavior.
 export async function applyOptOut(
   db: SupabaseClient,
   ownerId: string,

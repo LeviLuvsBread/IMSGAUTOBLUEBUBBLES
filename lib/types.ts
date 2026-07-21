@@ -74,8 +74,9 @@ export interface Message {
   bb_date_created: string | null;
   bb_date_delivered: string | null;
   bb_date_read: string | null;
+  // True on outbound rows whose text the AI wrote (openers) — the pump's
+  // "already generated" retry guard and the thread's AI provenance badge.
   ai_generated: boolean;
-  ai_pending_approval: boolean;
   created_at: string;
   sent_at: string | null;
   updated_at: string;
@@ -172,15 +173,3 @@ export interface ConversationState {
   updated_at: string;
 }
 
-export type NotificationType = "handover" | "escalation" | "opt_out";
-
-export interface AppNotification {
-  id: string;
-  owner_id: string;
-  type: NotificationType;
-  chat_guid: string | null;
-  title: string;
-  body: string | null;
-  read_at: string | null;
-  created_at: string;
-}

@@ -28,7 +28,6 @@ export default async function QueuePage() {
       .select("id, body, chat_guid, source, available_at, contact:contacts(name, phone)")
       .eq("direction", "out")
       .eq("status", "queued")
-      .eq("ai_pending_approval", false)
       .order("available_at", { ascending: true }),
     supabase
       .from("messages")
