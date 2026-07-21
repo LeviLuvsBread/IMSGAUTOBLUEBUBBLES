@@ -6,7 +6,6 @@ import { Download, FileText } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
 import { fmtBytes } from "@/lib/format";
 import { cn } from "@/lib/cn";
-import { AiDraftCard } from "@/components/AiDraftCard";
 import type { Message, MessageAttachment, MessageStatus } from "@/lib/types";
 
 function byCreated(a: Message, b: Message) {
@@ -222,12 +221,11 @@ export function MessageThread({
   }, [messages]);
 
   // iMessage shows the receipt only under the final outgoing bubble — skipping
-  // canceled rows and held AI drafts (which aren't sent bubbles).
+  // canceled rows.
   const lastOutId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
       if (m.status === "canceled") continue;
-      if (m.ai_generated && m.ai_pending_approval) continue;
       return m.direction === "out" ? m.id : null;
     }
     return null;
@@ -256,9 +254,6 @@ export function MessageThread({
         }
         const { m, firstInGroup, lastInGroup } = row;
         const out = m.direction === "out";
-        if (out && m.ai_generated && m.ai_pending_approval && m.status === "queued") {
-          return <AiDraftCard key={m.id} message={m} />;
-        }
         const failed = m.status === "failed";
         const isAi = out && m.ai_generated;
         const showReceipt = out && (failed || m.id === lastOutId);

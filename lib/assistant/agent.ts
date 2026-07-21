@@ -34,7 +34,8 @@ Core rules:
 - ALWAYS search before claiming you can't find someone. Call find_contacts first. If a full name returns nothing, retry with just the first name, then just the last name, then the company — names may be stored differently than spoken.
 - To text someone: find_contacts to get their id(s), THEN send_message with those ids. The owner gets a confirm card (exact people + message) before anything sends, so propose confidently. Never send to a name you haven't resolved to an id.
 - Read tools (find_contacts, get_overview, list_handovers, recent_replies) run instantly — use them freely to ground every answer. Never invent contacts, numbers, or stats; if a tool returns nothing, say so plainly.
-- Read intent generously: "pause everything" → set_paused(true); "turn the bot off" → set_ai_enabled(false); "who's ready / any handoffs" → list_handovers; "how are we doing" → get_overview; "open/go to/show me X" → navigate.
+- Read intent generously: "pause everything" → set_paused(true); "who's ready / any handoffs" → list_handovers; "how are we doing" → get_overview; "open/go to/show me X" → navigate.
+- The AI writes ONLY the initial opener to each lead — it never replies to conversations; the owner handles every reply personally. If asked to auto-reply or "turn the bot on", explain that replies are owner-only now.
 - Edit contacts freely with update_contacts: rename people, fix companies/emails/phones, retag, add notes, mark do-not-text. Bulk cleanups too — e.g. "keep only first names" → find_contacts, then update_contacts with each contact's id and its new name computed from the current one. Omit fields you aren't changing. delete_contacts removes contacts for good (their past messages stay in the inbox, unlinked; anything queued to them is canceled). The owner confirms a card listing the exact changes first, so propose confidently.
 - Templates: list_templates to read them, save_template to create or rewrite one (merge tags like {{first_name}}/{{company}} + {a|b|c} spintax variation), delete_template to remove one. Add individual people with create_contacts (name + phone); spreadsheets still go through import_contacts.
 - Settings: update_settings changes message spacing, jitter, daily cap, and the send window. Spacing under 2-3 minutes risks the number getting flagged — warn before proposing less unless the owner insists.
@@ -73,7 +74,7 @@ export const TOOLS: ToolDef[] = [
     function: {
       name: "get_overview",
       description:
-        "Current status: sent today vs daily cap, queued, failed, leads ready for handover, and whether the AI responder + sending are on/paused.",
+        "Current status: sent today vs daily cap, queued, failed, leads ready for handover, and whether sending is paused.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -303,18 +304,6 @@ export const TOOLS: ToolDef[] = [
   {
     type: "function",
     function: {
-      name: "set_ai_enabled",
-      description: "Turn the AI auto-responder on or off.",
-      parameters: {
-        type: "object",
-        properties: { enabled: { type: "boolean" } },
-        required: ["enabled"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
       name: "navigate",
       description: "Open a page in the app.",
       parameters: {
@@ -334,7 +323,6 @@ export const TOOLS: ToolDef[] = [
 export const WRITE_TOOLS = new Set([
   "send_message",
   "set_paused",
-  "set_ai_enabled",
   "import_contacts",
   "send_file",
   "update_contacts",
@@ -800,7 +788,7 @@ export async function runReadTool(
     const [{ data: s }, queued, failed, handover] = await Promise.all([
       supabase
         .from("app_settings")
-        .select("sends_today,daily_cap,paused,ai_enabled,ai_autosend")
+        .select("sends_today,daily_cap,paused")
         .eq("id", true)
         .maybeSingle(),
       supabase.from("messages").select("*", { count: "exact", head: true }).eq("direction", "out").eq("status", "queued"),
@@ -811,8 +799,6 @@ export async function runReadTool(
       sentToday: s?.sends_today,
       dailyCap: s?.daily_cap,
       paused: s?.paused,
-      aiEnabled: s?.ai_enabled,
-      autoSend: s?.ai_autosend,
       queued: queued.count,
       failed: failed.count,
       readyForHandover: handover.count,
@@ -864,7 +850,6 @@ export async function summarizeAction(
     return `Send to ${active.length} contact${active.length === 1 ? "" : "s"}${skipped > 0 ? ` (${skipped} opted-out skipped)` : ""}:\n${names}\n\nMessage:\n“${args.body}”`;
   }
   if (name === "set_paused") return args.paused ? "Pause ALL outgoing sending." : "Resume outgoing sending.";
-  if (name === "set_ai_enabled") return args.enabled ? "Turn the AI responder ON." : "Turn the AI responder OFF.";
   if (name === "save_template") {
     const tName = String(args.name ?? "").trim();
     const body = String(args.body ?? "").trim();
@@ -1257,10 +1242,6 @@ export async function executeAction(
   if (name === "set_paused") {
     await supabase.from("app_settings").update({ paused: !!args.paused, updated_at: new Date().toISOString() }).eq("id", true);
     return args.paused ? "✅ Sending paused." : "✅ Sending resumed.";
-  }
-  if (name === "set_ai_enabled") {
-    await supabase.from("app_settings").update({ ai_enabled: !!args.enabled, updated_at: new Date().toISOString() }).eq("id", true);
-    return args.enabled ? "✅ AI responder turned on." : "✅ AI responder turned off.";
   }
   return "Done.";
 }

@@ -121,10 +121,9 @@ export interface AppSettings {
   sends_today_date: string;
   bb_url: string | null;
   paused: boolean;
-  ai_enabled: boolean;
-  ai_autosend: boolean;
-  ai_max_turns: number;
-  ai_persona: string | null;
+  // Guides the AI-written OPENER (the only thing the AI writes — it never
+  // replies to conversations). The other 0002_ai.sql responder columns still
+  // exist in the DB but are unused since the responder was removed.
   ai_knowledge: string | null;
   updated_at: string;
 }
@@ -171,51 +170,6 @@ export interface ConversationState {
   ready_at: string | null;
   created_at: string;
   updated_at: string;
-}
-
-export type AiStageKind = "classify" | "research" | "draft" | "judge" | "finalize";
-
-export interface AiStage {
-  id: string;
-  owner_id: string;
-  position: number;
-  name: string;
-  kind: AiStageKind;
-  model: string;
-  prompt: string;
-  enabled: boolean;
-  can_block: boolean;
-  created_at: string;
-}
-
-export type AiRunOutcome =
-  | "replied"
-  | "held"
-  | "escalated"
-  | "opted_out"
-  | "no_reply"
-  | "max_turns"
-  | "error";
-
-export interface AiRunStage {
-  name: string;
-  model: string;
-  verdict: string;
-  analysis: string;
-  draft?: string;
-  ms?: number;
-  tokens?: number;
-}
-
-export interface AiRun {
-  id: string;
-  owner_id: string;
-  chat_guid: string;
-  inbound_message_id: string | null;
-  outcome: AiRunOutcome;
-  final_reply: string | null;
-  stages: AiRunStage[];
-  created_at: string;
 }
 
 export type NotificationType = "handover" | "escalation" | "opt_out";

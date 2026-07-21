@@ -271,47 +271,14 @@ export default async function SettingsPage() {
         </Section>
 
         <Section
-          title="AI Assistant"
-          footnote="Inbound replies are drafted through your stage pipeline. In approve mode every reply waits for you in the thread; turn on auto-send once you trust it."
+          title="AI opener"
+          footnote="The AI only writes the FIRST message to each lead (the “Auto” option in Compose) — it never replies to conversations; those are all yours. These rules guide what it writes. Leave blank for sensible defaults."
         >
           <Group>
-            <ToggleRow
-              label="Enable AI responder"
-              name="ai_enabled"
-              defaultChecked={s?.ai_enabled ?? false}
-              help="Master switch. When on, incoming replies get an AI-drafted response."
-            />
-            <ToggleRow
-              label="Auto-send approved replies"
-              name="ai_autosend"
-              defaultChecked={s?.ai_autosend ?? false}
-              help="Off = hold every draft for your approval (recommended). On = send automatically under the throttle."
-            />
-            <FieldRow
-              label="Max AI replies / thread"
-              name="ai_max_turns"
-              help="0 = no limit (only stops at handover or if it flags a time-waster)."
-              defaultValue={s?.ai_max_turns ?? 0}
-            />
-          </Group>
-        </Section>
-
-        <Section
-          title="AI voice & knowledge"
-          footnote="Persona shapes how it talks; knowledge holds the facts + do-not-say rules. Both are injected into every stage. Leave blank to use sensible defaults while testing."
-        >
-          <Group>
-            <TextAreaRow
-              label="Persona"
-              name="ai_persona"
-              help="Who the AI is and how it should sound."
-              placeholder="e.g. You're Alex, a friendly funding specialist who texts like a real person — casual, warm, concise, never salesy."
-              defaultValue={s?.ai_persona ?? ""}
-            />
             <TextAreaRow
               label="Knowledge & rules"
               name="ai_knowledge"
-              help="What you offer + what it must never say."
+              help="What you offer + what it must never say in an opener."
               placeholder="e.g. We help businesses get working capital fast. Never quote rates, fees, or approval amounts. Never guarantee funding."
               defaultValue={s?.ai_knowledge ?? ""}
             />

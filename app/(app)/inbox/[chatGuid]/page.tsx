@@ -2,11 +2,9 @@ import Link from "next/link";
 import { ChevronLeft, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { MessageThread } from "@/components/MessageThread";
-import { ThreadAiBar } from "@/components/ThreadAiBar";
 import { OptOutButton } from "@/components/OptOutButton";
 import { addressFromChatGuid } from "@/lib/chat";
 import { sendNow } from "../../actions";
-import { TEST_CHAT_GUID } from "@/lib/test-contact";
 import type { Message, ConversationState } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +34,6 @@ export default async function ThreadPage({
       .maybeSingle(),
   ]);
   const cs = (convo as ConversationState | null) ?? null;
-  const isTest = chatGuid === TEST_CHAT_GUID;
 
   return (
     <div className="flex h-[calc(100vh-9rem)] flex-col">
@@ -51,16 +48,6 @@ export default async function ThreadPage({
           {contact?.name || address}
         </h1>
       </div>
-
-      {cs || isTest ? (
-        <ThreadAiBar
-          chatGuid={chatGuid}
-          autopilot={cs?.ai_autopilot ?? true}
-          lifecycleStage={cs?.lifecycle_stage ?? "new"}
-          status={cs?.status ?? "active"}
-          isTest={isTest}
-        />
-      ) : null}
 
       {cs &&
       (cs.lifecycle_stage === "ready_for_handover" || cs.status === "escalated") ? (

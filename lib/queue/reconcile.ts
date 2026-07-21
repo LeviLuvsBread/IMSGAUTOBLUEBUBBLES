@@ -187,8 +187,8 @@ export async function recordInbound(
   }
 
   // Immediate opt-out: "STOP" (and anything like it) stops EVERYTHING for this
-  // thread and never gets a reply. This runs before any AI flagging so no reply
-  // is ever queued. Honored even for unknown numbers.
+  // thread. Runs before the needs-reply flagging so an opted-out thread never
+  // surfaces as awaiting a response. Honored even for unknown numbers.
   if (isOptOut(msg.text ?? "")) {
     await applyOptOut(admin, ownerId, msg.chatGuid, contactId);
     return { inserted: true };
@@ -203,13 +203,14 @@ export async function recordInbound(
     .eq("status", "active")
     .eq("stop_on_reply", true);
 
-  // Flag the thread for the AI responder (the per-minute AI cron picks it up).
+  // Flag the thread for the OWNER — replies are handled personally, never by
+  // AI. Feeds the dashboard/inbox needs-attention surfaces.
   await flagNeedsReply(admin, ownerId, msg.chatGuid, contactId, insertedRow?.id ?? null);
 
   return { inserted: true };
 }
 
-// Mark a thread as needing an AI reply. Skips threads the human already owns
+// Mark a thread as needing the owner's reply. Skips threads already resolved
 // (escalated / handed off / closed) or that opted out — those don't re-engage;
 // we only refresh the last inbound pointer there. Preserves turns/qualification.
 async function flagNeedsReply(

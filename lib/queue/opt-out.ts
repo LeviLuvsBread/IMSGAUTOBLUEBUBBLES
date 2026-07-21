@@ -40,7 +40,7 @@ export async function applyOptOut(
 
   // Park the conversation as opted_out and close the lifecycle — a thread we
   // can't message is never "ready for handover". Crucially do NOT set
-  // needs_reply, so the AI cron never picks it up.
+  // needs_reply, so it never surfaces as awaiting a response.
   const { data: existing } = await db
     .from("conversation_state")
     .select("chat_guid")
