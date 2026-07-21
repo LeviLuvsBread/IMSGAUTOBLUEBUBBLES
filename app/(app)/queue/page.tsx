@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { clearQueue, reorderQueue, requeueMessage } from "../actions";
+import { clearQueue, reorderQueue, requeueMessage, setQueuePaused } from "../actions";
 import { QueueManager } from "@/components/QueueManager";
 import type { AppSettings } from "@/lib/types";
 
@@ -79,6 +79,7 @@ export default async function QueuePage() {
       clearQueue={clearQueue}
       reorderQueue={reorderQueue}
       requeue={requeueMessage}
+      setPaused={setQueuePaused}
     />
   );
 }

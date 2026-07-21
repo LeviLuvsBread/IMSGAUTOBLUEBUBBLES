@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   AnimatePresence,
   motion,
@@ -14,6 +14,7 @@ import {
   Check,
   ListOrdered,
   Pause,
+  Play,
   ArrowUpToLine,
   ArrowDownToLine,
   AlertTriangle,
@@ -158,6 +159,7 @@ export function QueueManager({
   clearQueue,
   reorderQueue,
   requeue,
+  setPaused,
 }: {
   initial: QueueItem[];
   failed: FailedItem[];
@@ -167,6 +169,7 @@ export function QueueManager({
   clearQueue: () => Promise<{ canceled: number }>;
   reorderQueue: (orderedIds: string[]) => void | Promise<void>;
   requeue: (formData: FormData) => void;
+  setPaused: (paused: boolean) => void | Promise<void>;
 }) {
   const [items, setItems] = useState<QueueItem[]>(initial);
   const itemsRef = useRef(items);
@@ -174,7 +177,19 @@ export function QueueManager({
 
   const [savePending, startSave] = useTransition();
   const [clearPending, startClear] = useTransition();
+  const [pausePending, startPause] = useTransition();
   const [saved, setSaved] = useState(false);
+
+  // Optimistic pause state, re-synced when the server round-trip lands.
+  const [isPaused, setIsPaused] = useState(paused);
+  useEffect(() => setIsPaused(paused), [paused]);
+  const togglePaused = () => {
+    const next = !isPaused;
+    setIsPaused(next);
+    startPause(async () => {
+      await setPaused(next);
+    });
+  };
 
   const persist = (next: QueueItem[]) => {
     setItems(next);
@@ -252,6 +267,26 @@ export function QueueManager({
             ) : null}
           </AnimatePresence>
 
+          <button
+            onClick={togglePaused}
+            disabled={pausePending}
+            title={isPaused ? "Resume sending" : "Stop the queue — nothing sends until you resume"}
+            className={cn(
+              "press inline-flex items-center gap-1.5 rounded-control px-3 py-2 text-subhead font-medium transition-colors disabled:opacity-50",
+              isPaused
+                ? "bg-success text-white"
+                : "border border-warning/40 text-warning hover:bg-warning/10",
+            )}
+          >
+            {pausePending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : isPaused ? (
+              <Play className="h-4 w-4" />
+            ) : (
+              <Pause className="h-4 w-4" />
+            )}
+            {isPaused ? "Resume sending" : "Pause sending"}
+          </button>
           {items.length > 0 ? (
             <button
               onClick={clear}
@@ -269,11 +304,11 @@ export function QueueManager({
         </div>
       </div>
 
-      {paused ? (
+      {isPaused ? (
         <div className="flex items-center gap-2 rounded-card bg-warning/10 px-3 py-2 text-caption font-medium text-warning">
           <Pause className="h-3.5 w-3.5" />
-          Sending is paused — resume it from the Dashboard. Reordering still
-          works and takes effect when you resume.
+          Sending is paused — nothing goes out until you hit Resume. Reordering
+          still works and takes effect when you resume.
         </div>
       ) : null}
 
