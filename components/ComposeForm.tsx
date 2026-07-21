@@ -34,10 +34,11 @@ const AUTO = "__auto__";
 // Selecting someone contacted within this many days flags a re-message warning.
 const RECENT_DAYS = 7;
 
-// Contacts clustered into upload sessions by created_at: an import writes all
-// its rows within seconds, so any gap bigger than this starts a new upload.
-// Two sheets imported back-to-back within the gap read as one session.
-const UPLOAD_GAP_MS = 10 * 60 * 1000; // 10 minutes
+// Contacts clustered into upload sessions by created_at: one import writes all
+// its rows within seconds, so any gap bigger than this starts a new upload —
+// tight enough that EVERY separate import gets its own dated entry, even
+// several run minutes apart.
+const UPLOAD_GAP_MS = 60 * 1000; // 60 seconds
 type UploadGroup = { key: string; label: string; ids: string[]; newest: number };
 
 // "Last contacted" chip for a recipient row — amber if it was recent.
