@@ -213,8 +213,35 @@ function nextOccurrence(runAt: string, recurrence: string): string {
   return d.toISOString();
 }
 
+// Contacts this scheduled send has ALREADY enqueued a message for — in ANY
+// status (queued, sent, delivered, failed, even canceled), so a recurring
+// fire can never double-text someone or resurrect a deliberately cleared
+// queue. Paged because PostgREST caps a select at 1000 rows.
+export async function alreadySentTo(
+  admin: SupabaseClient,
+  scheduledSendId: string,
+): Promise<Set<string>> {
+  const ids = new Set<string>();
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await admin
+      .from("messages")
+      .select("contact_id")
+      .eq("scheduled_send_id", scheduledSendId)
+      .not("contact_id", "is", null)
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(error.message);
+    for (const r of data ?? []) ids.add(r.contact_id as string);
+    if (!data || data.length < PAGE) break;
+  }
+  return ids;
+}
+
 // Materialize due scheduled_sends. Uses optimistic claims (update guarded by the
-// original run_at / status) so overlapping pumps don't double-fire.
+// original run_at / status) so overlapping pumps don't double-fire. Each fire
+// skips contacts the send already messaged — so a DAILY recurrence walks a
+// list morning after morning, only ever texting the not-yet-contacted rest
+// (plus anyone newly added to the segment), with zero duplicates.
 async function materializeScheduled(
   admin: SupabaseClient,
   ownerId: string,
@@ -251,9 +278,12 @@ async function materializeScheduled(
 
     const tBody = await templateBody(admin, s.template_id);
 
+    const handled = await alreadySentTo(admin, s.id);
+
     if (s.segment) {
       const contacts = await resolveSegment(admin, ownerId, s.segment);
-      const inputs: EnqueueInput[] = contacts.map((c) => ({
+      const fresh = contacts.filter((c) => !handled.has(c.id));
+      const inputs: EnqueueInput[] = fresh.map((c) => ({
         ownerId,
         contactId: c.id,
         chatGuid: c.chat_guid ?? chatGuidForPhone(c.phone),
@@ -261,8 +291,8 @@ async function materializeScheduled(
         source: "scheduled",
         scheduledSendId: s.id,
       }));
-      count += await enqueueBulk(admin, inputs);
-    } else if (s.contact_id) {
+      count += inputs.length ? await enqueueBulk(admin, inputs) : 0;
+    } else if (s.contact_id && !handled.has(s.contact_id)) {
       const { data: c } = await admin
         .from("contacts")
         .select("*")

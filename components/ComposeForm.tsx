@@ -21,6 +21,7 @@ import {
   Sparkles,
   AlertTriangle,
   RotateCcw,
+  ShieldCheck,
 } from "lucide-react";
 import { sendBulkNow, sendBulkAuto } from "@/app/(app)/actions";
 import { renderForContact } from "@/lib/templating";
@@ -201,6 +202,20 @@ export function ComposeForm({
   );
   const isUploadSelected = (g: UploadGroup) =>
     g.ids.length > 0 && g.ids.every((id) => selected.has(id));
+
+  // Duplicate protection: one tap drops everyone in the current selection
+  // who has ALREADY been texted — so re-selecting a whole upload (or a
+  // re-uploaded list) only messages the people never contacted before.
+  const textedSelected = useMemo(
+    () => [...selected].filter((id) => lastContacted[id]),
+    [selected, lastContacted],
+  );
+  const skipAlreadyTexted = () =>
+    setSelected((prev) => {
+      const n = new Set(prev);
+      textedSelected.forEach((id) => n.delete(id));
+      return n;
+    });
   const toggleUpload = (g: UploadGroup) =>
     setSelected((prev) => {
       const n = new Set(prev);
@@ -466,6 +481,17 @@ export function ComposeForm({
                   </option>
                 ) : null}
               </select>
+            ) : null}
+            {textedSelected.length > 0 ? (
+              <button
+                type="button"
+                onClick={skipAlreadyTexted}
+                title="Duplicate protection: remove everyone who has already been texted, so only never-contacted leads stay selected"
+                className="inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-3 py-1.5 text-footnote font-medium text-warning ring-1 ring-warning/30 transition-colors duration-fast ease-ios hover:bg-warning/15"
+              >
+                <ShieldCheck className="h-3.5 w-3.5" />
+                Skip already texted ({textedSelected.length})
+              </button>
             ) : null}
           </div>
         ) : null}

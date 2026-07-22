@@ -109,6 +109,12 @@ export function ScheduleForm({
         </div>
       </div>
 
+      <p className="text-xs text-neutral-500 dark:text-neutral-400">
+        Repeating sends have duplicate protection: each run only texts people
+        this schedule hasn&apos;t messaged yet (plus anyone new in the list), then
+        picks up where it left off next time — no manual resume needed.
+      </p>
+
       <button className="rounded-lg bg-imsg-blue px-4 py-2 text-sm font-medium text-white">
         Schedule
       </button>
