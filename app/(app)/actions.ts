@@ -530,6 +530,11 @@ export async function createCampaign(formData: FormData) {
   }
 
   const segment = segmentFromForm(formData);
+  // A segment with no filters resolves to EVERY contact — block a blast to the
+  // whole book from an accidentally-empty selection (mirrors createScheduledSend).
+  if (!segment.all && !segment.company && !segment.tags?.length && !segment.contact_ids?.length) {
+    redirect("/campaigns/new?error=Pick+a+tag,+company,+contacts,+or+All+contacts");
+  }
   const contacts = await resolveSegment(supabase, userId, segment);
   if (contacts.length === 0) redirect("/campaigns/new?error=Segment+matched+0+contacts");
 

@@ -223,31 +223,42 @@ export function nextOccurrence(runAt: string, recurrence: string): string {
   return d.toISOString();
 }
 
+// The all-zeros uuid — sorts before every real contact_id, so it's a safe
+// starting cursor for keyset pagination.
+const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
+
 // Contacts this scheduled send has already enqueued a REAL message for —
 // counts queued/sending/sent/delivered/read and canceled (a cleared queue is a
 // deliberate skip), but NOT failed, so a batch wiped by a transient/spam-flag
 // error gets retried on the next fire instead of being dropped forever. Keeps
-// a recurring list-walk from double-texting anyone. Ordered + paged: without a
-// stable sort, LIMIT/OFFSET over rows the drain is concurrently updating could
-// skip a contact and cause the exact duplicate this prevents.
+// a recurring list-walk from double-texting anyone.
+//
+// KEYSET-paged on the immutable contact_id (cursor = last id seen), NOT
+// OFFSET: because the filter excludes a MUTABLE column (status != failed), an
+// OFFSET page would drift if a row flipped to failed mid-scan and silently
+// skip a contact — reopening the exact duplicate this prevents. A keyset
+// cursor is immune: it always resumes at "contact_id > last".
 export async function alreadySentTo(
   admin: SupabaseClient,
   scheduledSendId: string,
 ): Promise<Set<string>> {
   const ids = new Set<string>();
   const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
+  let cursor = ZERO_UUID;
+  for (;;) {
     const { data, error } = await admin
       .from("messages")
       .select("contact_id")
       .eq("scheduled_send_id", scheduledSendId)
       .neq("status", "failed")
-      .not("contact_id", "is", null)
+      .gt("contact_id", cursor)
       .order("contact_id", { ascending: true })
-      .range(from, from + PAGE - 1);
+      .limit(PAGE);
     if (error) throw new Error(error.message);
-    for (const r of data ?? []) ids.add(r.contact_id as string);
-    if (!data || data.length < PAGE) break;
+    if (!data || data.length === 0) break;
+    for (const r of data) ids.add(r.contact_id as string);
+    cursor = data[data.length - 1].contact_id as string;
+    if (data.length < PAGE) break;
   }
   return ids;
 }
