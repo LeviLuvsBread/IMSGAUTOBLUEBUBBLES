@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { ComposeForm } from "@/components/ComposeForm";
-import { lastContactedMap } from "@/lib/last-contacted";
+import { lastContactedMap, contactedIds } from "@/lib/last-contacted";
 import { lastSentBatch } from "@/lib/last-batch";
 import type { Contact, Template } from "@/lib/types";
 
@@ -20,6 +20,7 @@ export default async function ComposePage({
     { data: settings },
     lastContacted,
     rawBatch,
+    alreadyTexted,
   ] = await Promise.all([
     supabase.from("contacts").select("*").eq("opted_out", false).order("name"),
     supabase.from("templates").select("*").order("name"),
@@ -30,6 +31,7 @@ export default async function ComposePage({
       .maybeSingle(),
     lastContactedMap(supabase),
     lastSentBatch(supabase),
+    contactedIds(supabase),
   ]);
   const list = (contacts ?? []) as Contact[];
   // Keep only recipients still available to select (drops opted-out / deleted).
@@ -71,6 +73,7 @@ export default async function ComposePage({
           templates={(templates ?? []) as Template[]}
           lastContacted={lastContacted}
           lastBatch={lastBatch}
+          alreadyTexted={alreadyTexted.filter((id) => availableIds.has(id))}
           minDelay={s?.min_delay_seconds ?? 0}
           jitter={s?.jitter_seconds ?? 0}
           dailyCap={s?.daily_cap ?? 100}

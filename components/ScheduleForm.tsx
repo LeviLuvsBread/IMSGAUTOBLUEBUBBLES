@@ -110,9 +110,11 @@ export function ScheduleForm({
       </div>
 
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        Repeating sends have duplicate protection: each run only texts people
-        this schedule hasn&apos;t messaged yet (plus anyone new in the list), then
-        picks up where it left off next time — no manual resume needed.
+        Repeating a <strong>segment</strong> (tag / company / all) has duplicate
+        protection: each run only texts people this schedule hasn&apos;t messaged
+        yet, then picks up where it left off next time — no manual resume. A
+        repeat to a <strong>single contact</strong> messages them every run (a
+        reminder), so use a segment for a &ldquo;work through my list&rdquo; drip.
       </p>
 
       <button className="rounded-lg bg-imsg-blue px-4 py-2 text-sm font-medium text-white">

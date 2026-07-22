@@ -68,6 +68,7 @@ export function ComposeForm({
   templates,
   lastContacted,
   lastBatch,
+  alreadyTexted,
   minDelay,
   jitter,
   dailyCap,
@@ -77,6 +78,7 @@ export function ComposeForm({
   templates: Template[];
   lastContacted: Record<string, string>;
   lastBatch: string[];
+  alreadyTexted: string[];
   minDelay: number;
   jitter: number;
   dailyCap: number;
@@ -206,9 +208,12 @@ export function ComposeForm({
   // Duplicate protection: one tap drops everyone in the current selection
   // who has ALREADY been texted — so re-selecting a whole upload (or a
   // re-uploaded list) only messages the people never contacted before.
+  // Uses the exhaustive already-texted set (includes still-queued sends, no
+  // recency cap), not the last-contacted recency pills.
+  const alreadyTextedSet = useMemo(() => new Set(alreadyTexted), [alreadyTexted]);
   const textedSelected = useMemo(
-    () => [...selected].filter((id) => lastContacted[id]),
-    [selected, lastContacted],
+    () => [...selected].filter((id) => alreadyTextedSet.has(id)),
+    [selected, alreadyTextedSet],
   );
   const skipAlreadyTexted = () =>
     setSelected((prev) => {

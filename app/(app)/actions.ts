@@ -600,6 +600,19 @@ export async function createScheduledSend(formData: FormData) {
   const useSegment = formData.get("use_segment") === "on";
   const segment = useSegment ? segmentFromForm(formData) : null;
 
+  // A segment with no filters resolves to EVERY contact — guard against a
+  // recurring "text the whole book daily" send created by leaving the fields
+  // blank. Require at least one filter, or the explicit "All contacts" box.
+  if (useSegment) {
+    const s = segment as Segment;
+    const empty =
+      !s.all && !s.company && !(s.tags?.length) && !(s.contact_ids?.length);
+    if (empty)
+      redirect("/scheduler?error=Pick+a+tag,+company,+or+check+All+contacts+for+the+segment");
+  } else if (!contactId) {
+    redirect("/scheduler?error=Pick+a+contact+or+a+segment+to+send+to");
+  }
+
   await supabase.from("scheduled_sends").insert({
     owner_id: userId,
     contact_id: useSegment ? null : contactId,

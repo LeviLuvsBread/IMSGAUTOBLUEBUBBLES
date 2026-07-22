@@ -204,19 +204,32 @@ async function templateBody(
   return (data?.body as string) ?? null;
 }
 
-function nextOccurrence(runAt: string, recurrence: string): string {
-  const d = new Date(runAt);
-  if (recurrence === "daily") d.setUTCDate(d.getUTCDate() + 1);
-  else if (recurrence === "weekly") d.setUTCDate(d.getUTCDate() + 7);
+function addPeriod(d: Date, recurrence: string): void {
+  if (recurrence === "weekly") d.setUTCDate(d.getUTCDate() + 7);
   else if (recurrence === "hourly") d.setUTCHours(d.getUTCHours() + 1);
-  else d.setUTCDate(d.getUTCDate() + 1);
+  else d.setUTCDate(d.getUTCDate() + 1); // daily (default)
+}
+
+// The next run time strictly in the FUTURE. Advancing past *now* (not just one
+// period) is what stops a schedule that's overdue by several periods — after a
+// cron outage or a past-dated run_at — from staying "due" and letting
+// overlapping pump ticks each claim a different occurrence and double-text.
+export function nextOccurrence(runAt: string, recurrence: string): string {
+  const d = new Date(runAt);
+  const now = Date.now();
+  do {
+    addPeriod(d, recurrence);
+  } while (d.getTime() <= now);
   return d.toISOString();
 }
 
-// Contacts this scheduled send has ALREADY enqueued a message for — in ANY
-// status (queued, sent, delivered, failed, even canceled), so a recurring
-// fire can never double-text someone or resurrect a deliberately cleared
-// queue. Paged because PostgREST caps a select at 1000 rows.
+// Contacts this scheduled send has already enqueued a REAL message for —
+// counts queued/sending/sent/delivered/read and canceled (a cleared queue is a
+// deliberate skip), but NOT failed, so a batch wiped by a transient/spam-flag
+// error gets retried on the next fire instead of being dropped forever. Keeps
+// a recurring list-walk from double-texting anyone. Ordered + paged: without a
+// stable sort, LIMIT/OFFSET over rows the drain is concurrently updating could
+// skip a contact and cause the exact duplicate this prevents.
 export async function alreadySentTo(
   admin: SupabaseClient,
   scheduledSendId: string,
@@ -228,7 +241,9 @@ export async function alreadySentTo(
       .from("messages")
       .select("contact_id")
       .eq("scheduled_send_id", scheduledSendId)
+      .neq("status", "failed")
       .not("contact_id", "is", null)
+      .order("contact_id", { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) throw new Error(error.message);
     for (const r of data ?? []) ids.add(r.contact_id as string);
@@ -255,61 +270,70 @@ async function materializeScheduled(
 
   let count = 0;
   for (const s of due ?? []) {
-    // claim the row atomically
-    let claimed = false;
-    if (s.recurrence) {
-      const { data: upd } = await admin
-        .from("scheduled_sends")
-        .update({ run_at: nextOccurrence(s.run_at, s.recurrence), last_run_at: nowIso() })
-        .eq("id", s.id)
-        .eq("run_at", s.run_at)
-        .select("id");
-      claimed = !!(upd && upd.length);
-    } else {
-      const { data: upd } = await admin
-        .from("scheduled_sends")
-        .update({ status: "done", last_run_at: nowIso() })
-        .eq("id", s.id)
-        .eq("status", "active")
-        .select("id");
-      claimed = !!(upd && upd.length);
-    }
-    if (!claimed) continue;
+    // One bad schedule must not starve the others, the sequences, or the queue
+    // drain that run after this — isolate each fire.
+    try {
+      // claim the row atomically
+      let claimed = false;
+      if (s.recurrence) {
+        const { data: upd } = await admin
+          .from("scheduled_sends")
+          .update({ run_at: nextOccurrence(s.run_at, s.recurrence), last_run_at: nowIso() })
+          .eq("id", s.id)
+          .eq("run_at", s.run_at)
+          .select("id");
+        claimed = !!(upd && upd.length);
+      } else {
+        const { data: upd } = await admin
+          .from("scheduled_sends")
+          .update({ status: "done", last_run_at: nowIso() })
+          .eq("id", s.id)
+          .eq("status", "active")
+          .select("id");
+        claimed = !!(upd && upd.length);
+      }
+      if (!claimed) continue;
 
-    const tBody = await templateBody(admin, s.template_id);
+      const tBody = await templateBody(admin, s.template_id);
 
-    const handled = await alreadySentTo(admin, s.id);
-
-    if (s.segment) {
-      const contacts = await resolveSegment(admin, ownerId, s.segment);
-      const fresh = contacts.filter((c) => !handled.has(c.id));
-      const inputs: EnqueueInput[] = fresh.map((c) => ({
-        ownerId,
-        contactId: c.id,
-        chatGuid: c.chat_guid ?? chatGuidForPhone(c.phone),
-        body: renderTemplate(s.body ?? tBody ?? "", contactVars(c)),
-        source: "scheduled",
-        scheduledSendId: s.id,
-      }));
-      count += inputs.length ? await enqueueBulk(admin, inputs) : 0;
-    } else if (s.contact_id && !handled.has(s.contact_id)) {
-      const { data: c } = await admin
-        .from("contacts")
-        .select("*")
-        .eq("id", s.contact_id)
-        .maybeSingle();
-      const contact = c as Contact | null;
-      if (contact) {
-        await enqueueMessage(admin, {
+      if (s.segment) {
+        // List-walk: skip anyone this schedule already messaged, so a daily
+        // recurrence auto-continues through the not-yet-contacted rest.
+        const handled = await alreadySentTo(admin, s.id);
+        const contacts = await resolveSegment(admin, ownerId, s.segment);
+        const fresh = contacts.filter((c) => !handled.has(c.id));
+        const inputs: EnqueueInput[] = fresh.map((c) => ({
           ownerId,
-          contactId: contact.id,
-          chatGuid: contact.chat_guid ?? chatGuidForPhone(contact.phone),
-          body: renderTemplate(s.body ?? tBody ?? "", contactVars(contact)),
+          contactId: c.id,
+          chatGuid: c.chat_guid ?? chatGuidForPhone(c.phone),
+          body: renderTemplate(s.body ?? tBody ?? "", contactVars(c)),
           source: "scheduled",
           scheduledSendId: s.id,
-        });
-        count++;
+        }));
+        count += inputs.length ? await enqueueBulk(admin, inputs) : 0;
+      } else if (s.contact_id) {
+        // Single contact: fire EVERY occurrence (a daily/weekly reminder to one
+        // person is meant to repeat) — dedupe is only for list-walk segments.
+        const { data: c } = await admin
+          .from("contacts")
+          .select("*")
+          .eq("id", s.contact_id)
+          .maybeSingle();
+        const contact = c as Contact | null;
+        if (contact) {
+          await enqueueMessage(admin, {
+            ownerId,
+            contactId: contact.id,
+            chatGuid: contact.chat_guid ?? chatGuidForPhone(contact.phone),
+            body: renderTemplate(s.body ?? tBody ?? "", contactVars(contact)),
+            source: "scheduled",
+            scheduledSendId: s.id,
+          });
+          count++;
+        }
       }
+    } catch (e) {
+      console.error(`[pump] scheduled send ${s.id} failed to materialize`, e);
     }
   }
   return count;
