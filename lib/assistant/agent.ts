@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { enqueueBulk, type EnqueueInput } from "@/lib/queue/enqueue";
+import { enqueueBulk, enqueueOpeners, type EnqueueInput } from "@/lib/queue/enqueue";
+import { partitionByOpened } from "@/lib/last-contacted";
 import { applyOptOut } from "@/lib/queue/opt-out";
 import { renderForContact, extractVariables } from "@/lib/templating";
 import { chatGuidForPhone, toE164 } from "@/lib/chat";
@@ -842,12 +843,18 @@ export async function summarizeAction(
 ): Promise<string | null> {
   if (name === "send_message") {
     const ids = uniqueUuids(args.contactIds);
-    const { data } = await supabase.from("contacts").select("name,phone,opted_out").in("id", ids);
-    const rows = (data ?? []) as { name: string; phone: string; opted_out: boolean }[];
+    const { data } = await supabase.from("contacts").select("id,name,phone,opted_out").in("id", ids);
+    const rows = (data ?? []) as { id: string; name: string; phone: string; opted_out: boolean }[];
     const active = rows.filter((r) => !r.opted_out);
-    const names = active.map((r) => r.name || r.phone).join(", ") || "(none found)";
-    const skipped = rows.length - active.length;
-    return `Send to ${active.length} contact${active.length === 1 ? "" : "s"}${skipped > 0 ? ` (${skipped} opted-out skipped)` : ""}:\n${names}\n\nMessage:\n“${args.body}”`;
+    // No opener twice: preview only the people who'll actually get it.
+    const { eligible, alreadyOpened } = await partitionByOpened(supabase, active);
+    const names = eligible.map((r) => r.name || r.phone).join(", ") || "(none found)";
+    const optedOut = rows.length - active.length;
+    const notes = [
+      optedOut > 0 ? `${optedOut} opted-out skipped` : "",
+      alreadyOpened.length > 0 ? `${alreadyOpened.length} already texted, skipped` : "",
+    ].filter(Boolean);
+    return `Send to ${eligible.length} contact${eligible.length === 1 ? "" : "s"}${notes.length ? ` (${notes.join(", ")})` : ""}:\n${names}\n\nMessage:\n“${args.body}”`;
   }
   if (name === "set_paused") return args.paused ? "Pause ALL outgoing sending." : "Resume outgoing sending.";
   if (name === "save_template") {
@@ -999,15 +1006,22 @@ export async function executeAction(
     const ids = uniqueUuids(args.contactIds);
     const { data } = await supabase.from("contacts").select("*").in("id", ids).eq("opted_out", false);
     const contacts = (data ?? []) as Contact[];
-    const inputs: EnqueueInput[] = contacts.map((c) => ({
+    // Hard rule: never send an opener to a contact already reached — same
+    // no-double-opener protection as Compose and campaigns.
+    const { eligible, alreadyOpened } = await partitionByOpened(supabase, contacts);
+    const inputs: EnqueueInput[] = eligible.map((c) => ({
       ownerId: userId,
       chatGuid: c.chat_guid ?? chatGuidForPhone(c.phone),
       contactId: c.id,
       body: renderForContact(String(args.body ?? ""), c),
       source: "assistant",
     }));
-    const n = inputs.length ? await enqueueBulk(supabase, inputs) : 0;
-    return `✅ Queued ${n} message${n === 1 ? "" : "s"}. They'll drip out under your throttle.`;
+    const n = inputs.length ? await enqueueOpeners(supabase, inputs) : 0;
+    const skipped =
+      alreadyOpened.length > 0
+        ? ` ${alreadyOpened.length} already texted before, so ${alreadyOpened.length === 1 ? "that one was" : "those were"} skipped.`
+        : "";
+    return `✅ Queued ${n} message${n === 1 ? "" : "s"}.${skipped} They'll drip out under your throttle.`;
   }
   if (name === "import_contacts") {
     const headers = (args.headers ?? []) as string[];
@@ -1058,7 +1072,10 @@ export async function executeAction(
       chatGuid: c.chat_guid ?? chatGuidForPhone(c.phone),
       contactId: c.id,
       body: String(args.caption ?? "").trim(),
-      source: "assistant",
+      // 'file', NOT 'assistant': a file broadcast is a deliberate, owner-driven
+      // send that may legitimately go to someone already texted — it's exempt
+      // from the opener-once rule (kept out of the opener index / partitionByOpened).
+      source: "file",
       attachments: [
         {
           storage_path: file.path!,

@@ -67,3 +67,38 @@ export async function contactedIds(
   }
   return [...ids];
 }
+
+// THE OPENER RULE (owner mandate, non-negotiable): every contact receives the
+// initial/opener message AT MOST ONCE, EVER. Given a candidate list, split it
+// into contacts still eligible for an opener and those already reached. This is
+// the single choke point every opener-blast path funnels through — Compose
+// (last batch / newest upload / any selection), campaigns, the Director's bulk
+// send, and recurring scheduled walks — so no re-upload, re-selection, or
+// overlapping schedule can ever text someone their opener a second time.
+//
+// "Reached" reuses contactedIds() exactly: any outbound message that's
+// queued/sending/sent/delivered/read. Canceled and failed rows never arrived,
+// so those contacts stay eligible (a wiped queue or a spam-flagged batch can be
+// retried). Server-side and mandatory — not the client-side "Skip already
+// texted" chip, which is only a pre-send convenience the owner could forget.
+//
+// This is the FAST PRE-FILTER (it also drives the UI's already-texted counts).
+// The ATOMIC guarantee lives in the DB: the partial unique index
+// messages_one_opener_per_contact (migration 0007) makes a second live opener
+// row for a contact impossible to persist even under a same-instant race that
+// slips past this read-then-insert check. Opener enqueues go through
+// enqueueOpeners(), which turns the resulting unique violation into a graceful
+// skip. Keep this predicate and the index predicate in lockstep.
+export async function partitionByOpened<T extends { id: string }>(
+  supabase: SupabaseClient,
+  candidates: T[],
+): Promise<{ eligible: T[]; alreadyOpened: T[] }> {
+  if (candidates.length === 0) return { eligible: [], alreadyOpened: [] };
+  const opened = new Set(await contactedIds(supabase));
+  const eligible: T[] = [];
+  const alreadyOpened: T[] = [];
+  for (const c of candidates) {
+    (opened.has(c.id) ? alreadyOpened : eligible).push(c);
+  }
+  return { eligible, alreadyOpened };
+}
