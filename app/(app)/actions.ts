@@ -3,8 +3,9 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { enqueueMessage, enqueueBulk, type EnqueueInput } from "@/lib/queue/enqueue";
+import { enqueueMessage, enqueueOpeners, type EnqueueInput } from "@/lib/queue/enqueue";
 import { resolveSegment } from "@/lib/segments";
+import { partitionByOpened } from "@/lib/last-contacted";
 import { renderForContact, extractVariables } from "@/lib/templating";
 import { STARTER_TEMPLATES } from "@/lib/starter-templates";
 import { TEST_CHAT_GUID } from "@/lib/test-contact";
@@ -395,15 +396,19 @@ export async function reorderQueue(orderedIds: string[]) {
 // owner. Inbound replies just land in the inbox flagged as needing attention.
 
 // Bulk one-off send: render the message per contact (merge fields) and queue it
-// for everyone selected. Skips opted-out / missing. Returns how many queued.
+// for everyone selected. Skips opted-out / missing AND anyone who has already
+// received their opener (partitionByOpened — the hard no-double-opener rule, so
+// re-sending to "last batch" / a re-uploaded list never texts the same person
+// twice). Returns queued, opted-out skips, and already-texted skips separately.
 export async function sendBulkNow(
   contactIds: string[],
   body: string,
-): Promise<{ queued: number; skipped: number }> {
+): Promise<{ queued: number; skipped: number; alreadyTexted: number }> {
   const { supabase, userId } = await requireUser();
   const text = (body ?? "").trim();
   const ids = Array.isArray(contactIds) ? [...new Set(contactIds.filter(Boolean))] : [];
-  if (!text || ids.length === 0) return { queued: 0, skipped: ids.length };
+  if (!text || ids.length === 0)
+    return { queued: 0, skipped: ids.length, alreadyTexted: 0 };
 
   const { data } = await supabase
     .from("contacts")
@@ -411,17 +416,25 @@ export async function sendBulkNow(
     .in("id", ids)
     .eq("opted_out", false);
   const contacts = (data ?? []) as Contact[];
+  const optedOutOrMissing = ids.length - contacts.length;
 
-  const inputs: EnqueueInput[] = contacts.map((c) => ({
+  // Hard rule: drop anyone already opened before we queue anything.
+  const { eligible, alreadyOpened } = await partitionByOpened(supabase, contacts);
+
+  const inputs: EnqueueInput[] = eligible.map((c) => ({
     ownerId: userId,
     chatGuid: c.chat_guid ?? chatGuidForPhone(c.phone),
     contactId: c.id,
     body: renderForContact(text, c),
     source: "bulk",
   }));
-  const queued = inputs.length ? await enqueueBulk(supabase, inputs) : 0;
+  const queued = inputs.length ? await enqueueOpeners(supabase, inputs) : 0;
   revalidatePath("/");
-  return { queued, skipped: ids.length - contacts.length };
+  return {
+    queued,
+    skipped: optedOutOrMissing,
+    alreadyTexted: alreadyOpened.length,
+  };
 }
 
 // Auto outreach: queue an AI-written opener for each selected contact. The text
@@ -431,12 +444,12 @@ export async function sendBulkNow(
 // call fails and the style anchor. Skips opted-out / missing.
 export async function sendBulkAuto(
   contactIds: string[],
-): Promise<{ queued: number; skipped: number }> {
+): Promise<{ queued: number; skipped: number; alreadyTexted: number }> {
   const { supabase, userId } = await requireUser();
   const ids = Array.isArray(contactIds)
     ? [...new Set(contactIds.filter(Boolean))]
     : [];
-  if (ids.length === 0) return { queued: 0, skipped: 0 };
+  if (ids.length === 0) return { queued: 0, skipped: 0, alreadyTexted: 0 };
 
   const { data } = await supabase
     .from("contacts")
@@ -444,7 +457,19 @@ export async function sendBulkAuto(
     .in("id", ids)
     .eq("opted_out", false);
   const contacts = (data ?? []) as Contact[];
-  if (contacts.length === 0) return { queued: 0, skipped: ids.length };
+  const optedOutOrMissing = ids.length - contacts.length;
+  if (contacts.length === 0)
+    return { queued: 0, skipped: optedOutOrMissing, alreadyTexted: 0 };
+
+  // Hard rule: an AI opener is still an opener — never send one to a contact
+  // who has already been reached.
+  const { eligible, alreadyOpened } = await partitionByOpened(supabase, contacts);
+  if (eligible.length === 0)
+    return {
+      queued: 0,
+      skipped: optedOutOrMissing,
+      alreadyTexted: alreadyOpened.length,
+    };
 
   // Anchor templates: the user's cold-outreach templates, else the starters.
   const { data: tpls } = await supabase.from("templates").select("name, body");
@@ -453,7 +478,7 @@ export async function sendBulkAuto(
     .map((t: { body: string }) => t.body);
   const anchors = cold.length ? cold : STARTER_TEMPLATES.map((t) => t.body);
 
-  const inputs: EnqueueInput[] = contacts.map((c) => {
+  const inputs: EnqueueInput[] = eligible.map((c) => {
     const anchor = anchors[Math.floor(Math.random() * anchors.length)];
     return {
       ownerId: userId,
@@ -463,10 +488,14 @@ export async function sendBulkAuto(
       source: "auto_outreach",
     };
   });
-  const queued = inputs.length ? await enqueueBulk(supabase, inputs) : 0;
+  const queued = inputs.length ? await enqueueOpeners(supabase, inputs) : 0;
   revalidatePath("/");
   revalidatePath("/queue");
-  return { queued, skipped: ids.length - contacts.length };
+  return {
+    queued,
+    skipped: optedOutOrMissing,
+    alreadyTexted: alreadyOpened.length,
+  };
 }
 
 // ---------------- one-off send ----------------
@@ -538,6 +567,12 @@ export async function createCampaign(formData: FormData) {
   const contacts = await resolveSegment(supabase, userId, segment);
   if (contacts.length === 0) redirect("/campaigns/new?error=Segment+matched+0+contacts");
 
+  // Hard rule: a campaign is an opener blast — drop anyone already reached so
+  // it can't re-text a contact who's had their initial message.
+  const { eligible } = await partitionByOpened(supabase, contacts);
+  if (eligible.length === 0)
+    redirect("/campaigns/new?error=Everyone+in+that+segment+has+already+been+texted");
+
   const { data: campaign } = await supabase
     .from("campaigns")
     .insert({
@@ -546,13 +581,13 @@ export async function createCampaign(formData: FormData) {
       template_id: templateId,
       body,
       segment,
-      total: contacts.length,
+      total: eligible.length,
       status: "active",
     })
     .select("id")
     .single();
 
-  const inputs: EnqueueInput[] = contacts.map((c) => ({
+  const inputs: EnqueueInput[] = eligible.map((c) => ({
     ownerId: userId,
     contactId: c.id,
     chatGuid: c.chat_guid ?? chatGuidForPhone(c.phone),
@@ -560,7 +595,7 @@ export async function createCampaign(formData: FormData) {
     source: "bulk",
     campaignId: campaign?.id ?? null,
   }));
-  await enqueueBulk(supabase, inputs);
+  await enqueueOpeners(supabase, inputs);
 
   // Nudge the pump; the rest drips out via cron under the throttle gate.
   try {
@@ -635,7 +670,25 @@ export async function createScheduledSend(formData: FormData) {
 export async function deleteScheduledSend(formData: FormData) {
   const { supabase } = await requireUser();
   const id = String(formData.get("id") ?? "");
-  if (id) await supabase.from("scheduled_sends").delete().eq("id", id);
+  if (!id) return;
+  // A single-contact reminder is exempt from the opener-once rule. Deleting its
+  // schedule orphans the reminder's messages (FK is ON DELETE SET NULL), leaving
+  // them source='scheduled' — indistinguishable from an opener walk. Re-tag them
+  // 'reminder' BEFORE the delete so they can never be mistaken for a duplicate
+  // opener later. Segment openers keep 'scheduled'.
+  const { data: sched } = await supabase
+    .from("scheduled_sends")
+    .select("contact_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (sched?.contact_id) {
+    await supabase
+      .from("messages")
+      .update({ source: "reminder" })
+      .eq("scheduled_send_id", id)
+      .eq("source", "scheduled");
+  }
+  await supabase.from("scheduled_sends").delete().eq("id", id);
   revalidatePath("/scheduler");
 }
 

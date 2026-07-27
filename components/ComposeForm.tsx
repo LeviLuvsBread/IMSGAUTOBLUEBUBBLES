@@ -91,9 +91,11 @@ export function ComposeForm({
   const [templateId, setTemplateId] = useState("");
   const [body, setBody] = useState("");
   const [pending, start] = useTransition();
-  const [result, setResult] = useState<{ queued: number; skipped: number } | null>(
-    null,
-  );
+  const [result, setResult] = useState<{
+    queued: number;
+    skipped: number;
+    alreadyTexted: number;
+  } | null>(null);
 
   const tags = useMemo(() => {
     const set = new Set<string>();
@@ -491,11 +493,11 @@ export function ComposeForm({
               <button
                 type="button"
                 onClick={skipAlreadyTexted}
-                title="Duplicate protection: remove everyone who has already been texted, so only never-contacted leads stay selected"
+                title="These have already been texted and are ALWAYS skipped on send — no one ever gets a first message twice. Tap to clear them from the selection now so the count matches."
                 className="inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-3 py-1.5 text-footnote font-medium text-warning ring-1 ring-warning/30 transition-colors duration-fast ease-ios hover:bg-warning/15"
               >
                 <ShieldCheck className="h-3.5 w-3.5" />
-                Skip already texted ({textedSelected.length})
+                {textedSelected.length} already texted — auto-skipped
               </button>
             ) : null}
           </div>
@@ -686,6 +688,9 @@ export function ComposeForm({
           {result ? (
             <p className="mb-2 text-caption text-success">
               Queued {result.queued} message{result.queued === 1 ? "" : "s"}
+              {result.alreadyTexted > 0
+                ? ` · ${result.alreadyTexted} already texted (skipped — no one is texted twice)`
+                : ""}
               {result.skipped > 0 ? ` · ${result.skipped} skipped (opted out)` : ""}
               .
             </p>
