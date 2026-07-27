@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { enqueueMessage, enqueueBulk, type EnqueueInput } from "@/lib/queue/enqueue";
 import { resolveSegment } from "@/lib/segments";
 import { renderForContact, extractVariables } from "@/lib/templating";
@@ -10,6 +11,8 @@ import { STARTER_TEMPLATES } from "@/lib/starter-templates";
 import { TEST_CHAT_GUID } from "@/lib/test-contact";
 import { toE164, chatGuidForPhone } from "@/lib/chat";
 import { runPump } from "@/lib/queue/pump";
+import { getProvider } from "@/lib/provider";
+import { backfillChat } from "@/lib/queue/reconcile";
 import { applyOptOut } from "@/lib/queue/opt-out";
 import type { Contact, Segment } from "@/lib/types";
 
@@ -511,6 +514,28 @@ export async function sendNow(formData: FormData) {
   const chat = encodeURIComponent(chatGuid);
   revalidatePath(`/inbox/${chat}`);
   redirect(`/inbox/${chat}`);
+}
+
+// Pull a thread's history from iMessage (BlueBubbles) and surface any messages
+// we never stored — above all the owner's replies sent from their own device,
+// which the app never enqueued. Idempotent (dedups by guid), so it's safe to tap
+// repeatedly. Returns how many previously-missing messages were filled in.
+export async function syncThreadHistory(
+  chatGuid: string,
+): Promise<{ scanned: number; added: number }> {
+  const { userId } = await requireUser();
+  const guid = (chatGuid ?? "").trim();
+  if (!guid) return { scanned: 0, added: 0 };
+  try {
+    const admin = createAdminClient();
+    const provider = await getProvider();
+    const res = await backfillChat(admin, provider, userId, guid, 200);
+    revalidatePath(`/inbox/${encodeURIComponent(guid)}`);
+    return res;
+  } catch (e) {
+    console.error("[syncThreadHistory] failed", e);
+    return { scanned: 0, added: 0 };
+  }
 }
 
 // ---------------- bulk campaign ----------------
