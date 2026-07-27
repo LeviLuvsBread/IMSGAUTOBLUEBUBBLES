@@ -3,6 +3,7 @@ import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { MessageThread } from "@/components/MessageThread";
 import { OptOutButton } from "@/components/OptOutButton";
+import { SyncHistoryButton } from "@/components/SyncHistoryButton";
 import { addressFromChatGuid } from "@/lib/chat";
 import { sendNow } from "../../actions";
 import type { Message, ConversationState } from "@/lib/types";
@@ -52,7 +53,8 @@ export default async function ThreadPage({
             opted out
           </span>
         ) : null}
-        <span className="ml-auto">
+        <span className="ml-auto flex items-center gap-1.5">
+          <SyncHistoryButton chatGuid={chatGuid} />
           <OptOutButton chatGuid={chatGuid} name={contact?.name} small />
         </span>
       </div>

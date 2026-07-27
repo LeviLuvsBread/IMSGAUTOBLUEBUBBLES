@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       case "new-message": {
         const msg = provider.normalize(data);
         if (msg.isFromMe) {
-          await reconcileOutbound(admin, msg);
+          await reconcileOutbound(admin, msg, appOwnerId());
         } else {
           // Records the reply, applies STOP opt-outs, and flags the thread as
           // needing the OWNER's attention — the AI never replies to leads.
@@ -45,12 +45,12 @@ export async function POST(request: Request) {
       }
       case "updated-message": {
         const msg = provider.normalize(data);
-        if (msg.isFromMe) await reconcileOutbound(admin, msg);
+        if (msg.isFromMe) await reconcileOutbound(admin, msg, appOwnerId());
         break;
       }
       case "message-error": {
         const msg = provider.normalize(data);
-        await reconcileOutbound(admin, { ...msg, errorCode: msg.errorCode || 1 });
+        await reconcileOutbound(admin, { ...msg, errorCode: msg.errorCode || 1 }, appOwnerId());
         break;
       }
       // BlueBubbles labels this "New Server URL"; the event type it sends is

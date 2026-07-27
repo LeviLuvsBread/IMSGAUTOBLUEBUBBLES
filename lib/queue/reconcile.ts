@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ProviderMessage } from "@/lib/provider/types";
+import type { ProviderMessage, MessageProvider } from "@/lib/provider/types";
 import type { Message, MessageStatus } from "@/lib/types";
 import { addressFromChatGuid, toE164 } from "@/lib/chat";
 import { isOptOut } from "@/lib/ai/guardrails";
@@ -74,14 +74,18 @@ async function matchOutbound(
   return rows[0];
 }
 
-// Apply an outbound echo or delivery/read receipt to the matching row.
-// Returns true if a row was updated.
+// Apply an outbound echo or delivery/read receipt to the matching row. If no
+// app-enqueued row matches, the owner sent this from OUTSIDE the app (their
+// iPhone/Mac Messages, or another device) — capture it so the thread shows BOTH
+// sides of the conversation, not just the lead's replies. Returns true if a row
+// was updated or inserted.
 export async function reconcileOutbound(
   admin: SupabaseClient,
   msg: ProviderMessage,
+  ownerId: string,
 ): Promise<boolean> {
   const row = await matchOutbound(admin, msg);
-  if (!row) return false;
+  if (!row) return recordExternalOutbound(admin, msg, ownerId);
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (!row.bb_message_guid && msg.guid) update.bb_message_guid = msg.guid;
@@ -111,6 +115,114 @@ export async function reconcileOutbound(
 
   const { error } = await admin.from("messages").update(update).eq("id", row.id);
   if (error) throw error;
+  return true;
+}
+
+// Store an outbound message the owner sent OUTSIDE the app (typed on their
+// iPhone/Mac, another device) so it shows in the thread — otherwise the owner's
+// whole side of a conversation is invisible and the dashboard only ever shows
+// the app-sent opener plus the lead's replies. Idempotent by bb_message_guid
+// (also backed by the unique index). Skips content-less receipts/typing so we
+// don't render empty bubbles, and skips anything that looks like an app-sent
+// message that merely failed to link by guid, so we never duplicate a bubble.
+async function recordExternalOutbound(
+  admin: SupabaseClient,
+  msg: ProviderMessage,
+  ownerId: string,
+): Promise<boolean> {
+  if (!msg.chatGuid) return false;
+  const atts = msg.attachments ?? [];
+  const hasBody = (msg.text ?? "").trim().length > 0;
+  if (!hasBody && atts.length === 0) return false; // receipt/typing — nothing to show
+
+  // Idempotency: never store the same BlueBubbles guid twice.
+  if (msg.guid) {
+    const { data: existing } = await admin
+      .from("messages")
+      .select("id")
+      .eq("bb_message_guid", msg.guid)
+      .limit(1)
+      .maybeSingle();
+    if (existing) return false;
+  }
+
+  // Dedup guard: if a same-body outbound already exists in this chat near this
+  // time, it's our OWN app-sent message that just didn't link by guid (e.g. the
+  // send response returned a different guid than the webhook) — don't duplicate
+  // it. Broader than matchOutbound's Tier 3 (which skips already-linked rows).
+  if (hasBody) {
+    const anchor = msg.dateCreated ? new Date(msg.dateCreated).getTime() : Date.now();
+    const lo = new Date(anchor - MATCH_WINDOW_MS).toISOString();
+    const hi = new Date(anchor + MATCH_WINDOW_MS).toISOString();
+    const { data: dup } = await admin
+      .from("messages")
+      .select("id")
+      .eq("chat_guid", msg.chatGuid)
+      .eq("direction", "out")
+      .eq("body", msg.text)
+      .gte("sent_at", lo)
+      .lte("sent_at", hi)
+      .limit(1);
+    if (dup && dup.length) return false;
+  }
+
+  // Attach a contact by phone/handle (same resolution as recordInbound).
+  let contactId: string | null = null;
+  const address = msg.handleAddress ?? addressFromChatGuid(msg.chatGuid);
+  if (address) {
+    const e164 = address.includes("@") ? address : toE164(address);
+    const { data: contact } = await admin
+      .from("contacts")
+      .select("id")
+      .eq("owner_id", ownerId)
+      .eq("phone", e164)
+      .limit(1)
+      .maybeSingle();
+    contactId = contact?.id ?? null;
+  }
+
+  const errored = !!(msg.errorCode && msg.errorCode > 0);
+  const status: MessageStatus = errored
+    ? "failed"
+    : msg.dateRead
+      ? "read"
+      : msg.dateDelivered
+        ? "delivered"
+        : "sent";
+
+  const baseRow: Record<string, unknown> = {
+    owner_id: ownerId,
+    contact_id: contactId,
+    chat_guid: msg.chatGuid,
+    direction: "out",
+    body: msg.text ?? "",
+    status,
+    source: "manual", // the owner sent it by hand, from their own device
+    bb_message_guid: msg.guid ?? null,
+    bb_date_created: msg.dateCreated ?? new Date().toISOString(),
+    bb_date_delivered: msg.dateDelivered ?? null,
+    bb_date_read: msg.dateRead ?? null,
+    associated_guid: msg.associatedMessageGuid ?? null,
+    sent_at: msg.dateCreated ?? new Date().toISOString(),
+    error: errored ? `BlueBubbles error code ${msg.errorCode}` : null,
+  };
+
+  let { error } = await admin
+    .from("messages")
+    .insert(atts.length ? { ...baseRow, attachments: atts } : baseRow);
+  // Attachments column not migrated yet → store without it rather than drop.
+  if (
+    error &&
+    atts.length &&
+    ["PGRST204", "42703"].includes((error as { code?: string }).code ?? "")
+  ) {
+    ({ error } = await admin.from("messages").insert(baseRow));
+  }
+  if (error) {
+    // Unique violation on bb_message_guid → a concurrent webhook already won.
+    if ((error as { code?: string }).code === "23505") return false;
+    throw error;
+  }
   return true;
 }
 
@@ -256,4 +368,51 @@ async function flagNeedsReply(
     .update(patch)
     .eq("owner_id", ownerId)
     .eq("chat_guid", chatGuid);
+}
+
+async function existsByGuid(admin: SupabaseClient, guid: string): Promise<boolean> {
+  const { data } = await admin
+    .from("messages")
+    .select("id")
+    .eq("bb_message_guid", guid)
+    .limit(1)
+    .maybeSingle();
+  return !!data;
+}
+
+// One-time (re-runnable) history sync for a chat: pull recent messages from the
+// provider and replay each through the SAME idempotent path the live webhook
+// uses, so any message we never stored — above all the owner's replies typed on
+// their own device, which the app never enqueued — gets surfaced into the
+// thread. Safe to run repeatedly: recordInbound and reconcileOutbound both
+// dedup by bb_message_guid, so re-syncing only fills gaps.
+export async function backfillChat(
+  admin: SupabaseClient,
+  provider: MessageProvider,
+  ownerId: string,
+  chatGuid: string,
+  limit = 200,
+): Promise<{ scanned: number; added: number }> {
+  const msgs = await provider.getChatMessages(chatGuid, { limit });
+  // Provider returns newest-first; replay oldest-first so surfaced rows land in
+  // chronological order.
+  const ordered = [...msgs].reverse();
+  let added = 0;
+  for (const raw of ordered) {
+    const msg: ProviderMessage = { ...raw, chatGuid: raw.chatGuid || chatGuid };
+    if (!msg.guid) continue; // no guid → can't dedup safely, skip
+    try {
+      if (msg.isFromMe) {
+        const existed = await existsByGuid(admin, msg.guid);
+        const changed = await reconcileOutbound(admin, msg, ownerId);
+        if (changed && !existed) added++;
+      } else {
+        const { inserted } = await recordInbound(admin, msg, ownerId);
+        if (inserted) added++;
+      }
+    } catch (e) {
+      console.error("[backfill] message failed", msg.guid, e);
+    }
+  }
+  return { scanned: msgs.length, added };
 }
