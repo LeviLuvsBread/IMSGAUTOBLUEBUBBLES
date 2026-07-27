@@ -4,7 +4,8 @@ import { createAdminClient, appOwnerId } from "@/lib/supabase/admin";
 import { getProvider } from "@/lib/provider";
 import { renderTemplate, contactVars } from "@/lib/templating";
 import { resolveSegment } from "@/lib/segments";
-import { enqueueMessage, enqueueBulk, type EnqueueInput } from "@/lib/queue/enqueue";
+import { contactedIds } from "@/lib/last-contacted";
+import { enqueueMessage, enqueueOpeners, type EnqueueInput } from "@/lib/queue/enqueue";
 import { chatGuidForPhone } from "@/lib/chat";
 import { generateOpener, type OpenerContext } from "@/lib/ai/generate-opener";
 import { STARTER_TEMPLATES } from "@/lib/starter-templates";
@@ -279,8 +280,20 @@ async function materializeScheduled(
     .eq("status", "active")
     .lte("run_at", nowIso());
 
+  // Global opener rule: nobody already reached (by ANY path — a Compose blast,
+  // a campaign, or another schedule) gets an opener again. Snapshot the reached
+  // set once per tick, then grow it as we enqueue so two schedules firing in the
+  // same tick can't both open the same newly-added contact. Only load it if a
+  // segment schedule is actually due (single-contact reminders are exempt).
+  const dueList = due ?? [];
+  let openedGlobal: Set<string> | null = null;
+  const reachedSet = async (): Promise<Set<string>> => {
+    if (!openedGlobal) openedGlobal = new Set(await contactedIds(admin));
+    return openedGlobal;
+  };
+
   let count = 0;
-  for (const s of due ?? []) {
+  for (const s of dueList) {
     // One bad schedule must not starve the others, the sequences, or the queue
     // drain that run after this — isolate each fire.
     try {
@@ -308,11 +321,15 @@ async function materializeScheduled(
       const tBody = await templateBody(admin, s.template_id);
 
       if (s.segment) {
-        // List-walk: skip anyone this schedule already messaged, so a daily
-        // recurrence auto-continues through the not-yet-contacted rest.
+        // List-walk: skip anyone this schedule already messaged (auto-continue
+        // through the not-yet-contacted rest each recurrence) AND anyone reached
+        // by any other path — the global no-double-opener rule.
         const handled = await alreadySentTo(admin, s.id);
+        const opened = await reachedSet();
         const contacts = await resolveSegment(admin, ownerId, s.segment);
-        const fresh = contacts.filter((c) => !handled.has(c.id));
+        const fresh = contacts.filter(
+          (c) => !handled.has(c.id) && !opened.has(c.id),
+        );
         const inputs: EnqueueInput[] = fresh.map((c) => ({
           ownerId,
           contactId: c.id,
@@ -321,7 +338,10 @@ async function materializeScheduled(
           source: "scheduled",
           scheduledSendId: s.id,
         }));
-        count += inputs.length ? await enqueueBulk(admin, inputs) : 0;
+        // These contacts are now reached — bar any later schedule this tick from
+        // re-opening them.
+        for (const c of fresh) opened.add(c.id);
+        count += inputs.length ? await enqueueOpeners(admin, inputs) : 0;
       } else if (s.contact_id) {
         // Single contact: fire EVERY occurrence (a daily/weekly reminder to one
         // person is meant to repeat) — dedupe is only for list-walk segments.
@@ -337,7 +357,11 @@ async function materializeScheduled(
             contactId: contact.id,
             chatGuid: contact.chat_guid ?? chatGuidForPhone(contact.phone),
             body: renderTemplate(s.body ?? tBody ?? "", contactVars(contact)),
-            source: "scheduled",
+            // 'reminder', NOT 'scheduled': a single-contact reminder is meant to
+            // repeat every occurrence, so it must stay OUT of the opener-once
+            // rule (the messages_one_opener_per_contact index only covers opener
+            // sources). Only the segment-walk branch above sends true openers.
+            source: "reminder",
             scheduledSendId: s.id,
           });
           count++;

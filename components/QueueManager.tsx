@@ -48,10 +48,13 @@ const SOURCE_LABEL: Record<string, string> = {
   manual: "Manual",
   bulk: "Campaign",
   scheduled: "Scheduled",
+  reminder: "Reminder",
   sequence: "Sequence",
   reply: "Reply",
   ai: "AI",
   auto_outreach: "Auto (AI)",
+  assistant: "Director",
+  file: "File",
 };
 
 function Row({
