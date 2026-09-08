@@ -128,8 +128,23 @@ async function parseSheet(
   return null;
 }
 
+// Phone-sized viewport (below Tailwind's md breakpoint). Drives the Director's
+// two layouts: a right-edge slide-out sheet on phones, a floating card on desktop.
+function useIsPhone(): boolean {
+  const [phone, setPhone] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const sync = () => setPhone(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+  return phone;
+}
+
 export function Assistant() {
   const router = useRouter();
+  const phone = useIsPhone();
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([WELCOME]);
   const [chats, setChats] = useState<Chat[]>([]);
@@ -315,22 +330,55 @@ export function Assistant() {
 
   return (
     <>
+      {/* Desktop: floating bubble, bottom-right. */}
       <button
         onClick={() => setOpen((o) => !o)}
         aria-label="Open assistant"
-        className="press fixed bottom-5 right-5 z-[60] flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-glow transition-transform"
+        className="press fixed bottom-5 right-5 z-[60] hidden md:flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-glow transition-transform"
       >
         {open ? <X className="h-6 w-6" /> : <Sparkles className="h-6 w-6" />}
       </button>
+      {/* Phone: a slim handle on the right edge, mid-screen. The old bottom-right
+          bubble sat on top of the bottom tab bar and hid the Templates tab (and
+          crowded any page's Send button); the edge handle overlaps nothing and
+          slides the Director in from the right. Hidden while the sheet is open —
+          the sheet has its own close button. */}
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          aria-label="Open assistant"
+          className="press fixed right-0 top-1/2 z-[60] flex h-16 w-8 -translate-y-1/2 items-center justify-center rounded-l-2xl bg-accent text-white shadow-glow md:hidden"
+        >
+          <Sparkles className="h-5 w-5" />
+        </button>
+      ) : null}
 
       <AnimatePresence>
         {open ? (
           <motion.div
-            initial={{ opacity: 0, y: 16, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 16, scale: 0.98 }}
+            key="director-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setOpen(false)}
+            aria-hidden
+            className="fixed inset-0 z-[59] bg-black/30 md:hidden"
+          />
+        ) : null}
+        {open ? (
+          <motion.div
+            key="director-panel"
+            initial={phone ? { x: "100%" } : { opacity: 0, y: 16, scale: 0.98 }}
+            animate={phone ? { x: 0 } : { opacity: 1, y: 0, scale: 1 }}
+            exit={phone ? { x: "100%" } : { opacity: 0, y: 16, scale: 0.98 }}
             transition={{ type: "spring", stiffness: 420, damping: 34 }}
-            className="liquid-glass fixed bottom-24 right-5 z-[60] flex h-[min(70vh,560px)] w-[min(92vw,400px)] flex-col overflow-hidden rounded-card-lg ring-1 ring-white/15"
+            className={cn(
+              "liquid-glass fixed z-[60] flex w-[min(92vw,400px)] flex-col overflow-hidden ring-1 ring-white/15",
+              // Phone: full-height sheet docked to the right edge, above the tab bar.
+              "inset-y-0 right-0 h-[100dvh] rounded-l-card-lg safe-top safe-bottom",
+              // Desktop: the floating card above the bubble, as before.
+              "md:inset-y-auto md:bottom-24 md:right-5 md:h-[min(70vh,560px)] md:rounded-card-lg",
+            )}
           >
             <div className="relative border-b border-separator">
               <div className="flex items-center gap-2 px-4 py-3">
