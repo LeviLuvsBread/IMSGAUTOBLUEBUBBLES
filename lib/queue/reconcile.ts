@@ -50,9 +50,14 @@ async function matchOutbound(
   // Tier 3: heuristic — same chat + body + outbound + unlinked, nearest in time.
   if (!msg.chatGuid) return null;
   const anchor = msg.dateCreated ? new Date(msg.dateCreated).getTime() : Date.now();
-  const lo = new Date(anchor - MATCH_WINDOW_MS).toISOString();
-  const hi = new Date(anchor + MATCH_WINDOW_MS).toISOString();
 
+  // A row still IN FLIGHT ('sending') has no sent_at yet — only the claimed_at
+  // stamped by claim_next_send. BlueBubbles can fail a message and fire
+  // message-error BEFORE the pump's HTTP call returns and stamps sent_at, so a
+  // sent_at-only window silently misses the very row the error belongs to (the
+  // row then gets marked "sent" and a never-reached contact counts as reached).
+  // The candidate set (same chat + same body + unlinked + live) is tiny, so
+  // filter it here on whichever timestamp the row actually has.
   const { data } = await admin
     .from("messages")
     .select("*")
@@ -60,17 +65,16 @@ async function matchOutbound(
     .eq("direction", "out")
     .eq("body", msg.text)
     .is("bb_message_guid", null)
-    .in("status", ["sending", "sent", "delivered"])
-    .gte("sent_at", lo)
-    .lte("sent_at", hi);
+    .in("status", ["sending", "sent", "delivered"]);
 
-  const rows = (data ?? []) as Message[];
-  if (rows.length === 0) return null;
-  rows.sort((a, b) => {
-    const da = Math.abs(new Date(a.sent_at ?? a.created_at).getTime() - anchor);
-    const db = Math.abs(new Date(b.sent_at ?? b.created_at).getTime() - anchor);
-    return da - db;
+  const stamp = (r: Message) =>
+    new Date(r.sent_at ?? r.claimed_at ?? r.created_at).getTime();
+  const rows = ((data ?? []) as Message[]).filter((r) => {
+    const t = stamp(r);
+    return t >= anchor - MATCH_WINDOW_MS && t <= anchor + MATCH_WINDOW_MS;
   });
+  if (rows.length === 0) return null;
+  rows.sort((a, b) => Math.abs(stamp(a) - anchor) - Math.abs(stamp(b) - anchor));
   return rows[0];
 }
 
@@ -144,6 +148,23 @@ async function recordExternalOutbound(
       .limit(1)
       .maybeSingle();
     if (existing) return false;
+  }
+
+  // In-flight guard: a same-body outbound that is still queued/sending is
+  // unambiguously OUR OWN message — a text typed on the owner's device is never
+  // in those states in this DB. BlueBubbles can fire message-error for it before
+  // the pump stamps sent_at; that row belongs to matchOutbound (claimed_at), so
+  // never mint a phantom "failed" twin for it.
+  if (hasBody) {
+    const { data: inflight } = await admin
+      .from("messages")
+      .select("id")
+      .eq("chat_guid", msg.chatGuid)
+      .eq("direction", "out")
+      .eq("body", msg.text)
+      .in("status", ["queued", "sending"])
+      .limit(1);
+    if (inflight && inflight.length) return false;
   }
 
   // Dedup guard: if a same-body outbound already exists in this chat near this

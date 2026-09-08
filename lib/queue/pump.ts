@@ -149,7 +149,13 @@ export async function runPump(maxBatch = 10): Promise<PumpResult> {
     }
 
     if (res.ok) {
-      await admin
+      // BlueBubbles can fail the message (message-error webhook → 'failed') or
+      // confirm it (receipt → 'delivered'/'read') BEFORE this HTTP call returns.
+      // Never clobber that established truth back to 'sent' — a contact who
+      // never got the text would then count as reached and be locked out of a
+      // retry. Rows still sending (or reclaimed to queued mid-send) do promote,
+      // so a slow-but-successful send is never re-sent.
+      const { data: promoted } = await admin
         .from("messages")
         .update({
           status: "sent",
@@ -158,8 +164,10 @@ export async function runPump(maxBatch = 10): Promise<PumpResult> {
           error: res.error ?? null,
           updated_at: nowIso(),
         })
-        .eq("id", row.id);
-      sent++;
+        .eq("id", row.id)
+        .not("status", "in", "(failed,delivered,read)")
+        .select("id");
+      if (promoted && promoted.length) sent++;
     } else {
       await failOrRetry(admin, row, res.error ?? "send failed");
       failed++;
