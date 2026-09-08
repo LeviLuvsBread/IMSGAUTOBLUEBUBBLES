@@ -2,7 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ProviderMessage, MessageProvider } from "@/lib/provider/types";
 import type { Message, MessageStatus } from "@/lib/types";
-import { addressFromChatGuid, toE164 } from "@/lib/chat";
+import { addressFromChatGuid, chatGuidForPhone, toE164 } from "@/lib/chat";
 import { isOptOut } from "@/lib/ai/guardrails";
 import { applyOptOut } from "@/lib/queue/opt-out";
 
@@ -19,6 +19,18 @@ const RANK: Record<MessageStatus, number> = {
 
 // Window (ms) for the heuristic time-based match when tempGuid isn't echoed.
 const MATCH_WINDOW_MS = 3 * 60 * 1000;
+
+// BlueBubbles reports a chat under whichever service it resolved — normally
+// "iMessage;-;<addr>", but a message that fails before a service is settled
+// (e.g. iMessage signed out on the Mac) comes back as "any;-;<addr>", and an
+// SMS fallback as "SMS;-;<addr>". The app stores outbound rows under
+// chatGuidForPhone ("iMessage;-;<addr>"), so an exact chat_guid match silently
+// misses exactly the error events we most need to link. Match every service
+// spelling of the same address instead.
+function chatGuidVariants(chatGuid: string): string[] {
+  const addr = addressFromChatGuid(chatGuid);
+  return [...new Set([chatGuid, `iMessage;-;${addr}`, `SMS;-;${addr}`, `any;-;${addr}`])];
+}
 
 // Find the outbound message row that a BlueBubbles echo/receipt belongs to.
 async function matchOutbound(
@@ -61,7 +73,7 @@ async function matchOutbound(
   const { data } = await admin
     .from("messages")
     .select("*")
-    .eq("chat_guid", msg.chatGuid)
+    .in("chat_guid", chatGuidVariants(msg.chatGuid))
     .eq("direction", "out")
     .eq("body", msg.text)
     .is("bb_message_guid", null)
@@ -159,7 +171,7 @@ async function recordExternalOutbound(
     const { data: inflight } = await admin
       .from("messages")
       .select("id")
-      .eq("chat_guid", msg.chatGuid)
+      .in("chat_guid", chatGuidVariants(msg.chatGuid))
       .eq("direction", "out")
       .eq("body", msg.text)
       .in("status", ["queued", "sending"])
@@ -178,7 +190,7 @@ async function recordExternalOutbound(
     const { data: dup } = await admin
       .from("messages")
       .select("id")
-      .eq("chat_guid", msg.chatGuid)
+      .in("chat_guid", chatGuidVariants(msg.chatGuid))
       .eq("direction", "out")
       .eq("body", msg.text)
       .gte("sent_at", lo)
@@ -187,19 +199,27 @@ async function recordExternalOutbound(
     if (dup && dup.length) return false;
   }
 
-  // Attach a contact by phone/handle (same resolution as recordInbound).
+  // Attach a contact by phone/handle (same resolution as recordInbound), and
+  // store the row under the app's CANONICAL chat guid so it lands in the same
+  // thread as everything else for this person. Stored verbatim, a BlueBubbles
+  // "any;-;<addr>" guid would split the conversation into a second, invisible
+  // thread that the inbox (keyed on the contact's guid) never shows.
   let contactId: string | null = null;
+  let chatGuid = msg.chatGuid;
   const address = msg.handleAddress ?? addressFromChatGuid(msg.chatGuid);
   if (address) {
     const e164 = address.includes("@") ? address : toE164(address);
     const { data: contact } = await admin
       .from("contacts")
-      .select("id")
+      .select("id, chat_guid")
       .eq("owner_id", ownerId)
       .eq("phone", e164)
       .limit(1)
       .maybeSingle();
     contactId = contact?.id ?? null;
+    chatGuid =
+      (contact?.chat_guid as string | null) ??
+      (address.includes("@") ? msg.chatGuid : chatGuidForPhone(e164));
   }
 
   const errored = !!(msg.errorCode && msg.errorCode > 0);
@@ -214,7 +234,7 @@ async function recordExternalOutbound(
   const baseRow: Record<string, unknown> = {
     owner_id: ownerId,
     contact_id: contactId,
-    chat_guid: msg.chatGuid,
+    chat_guid: chatGuid,
     direction: "out",
     body: msg.text ?? "",
     status,
